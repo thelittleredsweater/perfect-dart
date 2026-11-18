@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07091a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Perfect Darts">
+<link rel="apple-touch-icon" href="img/icons/app-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Perfect Darts 🎯</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body data-accent="orange">
+
+<div class="screen active" id="screenSetup">
+  <div class="container">
+    <div class="quick-nav">
+      <button class="btn btn-ghost btn-sm" onclick="openNetPanel()">🌐 En ligne</button>
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('screenStats');renderStatsScreen()">📈 Statistiques</button>
+      <button class="btn btn-ghost btn-sm" onclick="openSettings()">⚙️ Réglages</button>
+    </div>
+    <div class="setup-logo"><h1>Perfect Darts</h1><p>Le compteur qui te fait progresser</p></div>
+    <div class="card" id="cardPlayers">
+      <div class="field"><label class="label">Nombre de joueurs</label>
+        <div class="player-stepper">
+          <button class="step-btn" type="button" onclick="changePlayerCount(-1)" aria-label="Un joueur de moins">−</button>
+          <span class="player-count" id="playerCountLabel">2 joueurs</span>
+          <button class="step-btn" type="button" onclick="changePlayerCount(1)" aria-label="Un joueur de plus">+</button>
+        </div>
+        <span class="stepper-hint" id="playerCountHint">En solo, un bot vous affronte</span>
+      </div>
+      <div class="players-grid" id="playerNamesGrid"></div>
+    </div>
+    <div class="card">
+      <div class="field"><label class="label">Mode de jeu</label>
+        <select id="cfgMode"><option value="301">301</option><option value="501" selected>501</option><option value="701">701</option><option value="901">901</option><option value="1001">1001</option><option value="cricket">Cricket</option><option value="around">Around the Clock</option><option value="bobs27">Bob's 27 — doubles</option><option value="catch40">Catch 40</option><option value="highscore">Highscore (10 volées)</option></select>
+      </div>
+      <div class="field" id="fieldFinish"><label class="label">Règle de fin</label>
+        <select id="cfgFinish"><option value="straight">Simple (score = 0)</option><option value="double" selected>Double obligatoire</option></select>
+      </div>
+      <div class="field" id="fieldDoubleIn" style="display:none"><label class="label">Départ</label>
+        <label style="display:flex;align-items:center;gap:10px;font-size:.9em;font-weight:700"><input type="checkbox" id="cfgDoubleIn" style="width:auto">Double obligatoire aussi à l'ouverture</label>
+      </div>
+      <div class="field" id="fieldCutThroat" style="display:none"><label class="label">Variante</label>
+        <label style="display:flex;align-items:center;gap:10px;font-size:.9em;font-weight:700"><input type="checkbox" id="cfgCutThroat" style="width:auto">Cut-throat : marquer pénalise les adversaires</label>
+      </div>
+      <div class="field" id="fieldAround" style="display:none"><label class="label">Type de cible</label>
+        <select id="cfgAround"><option value="1" selected>Simples</option><option value="2">Doubles</option><option value="3">Triples</option></select>
+      </div>
+      <div class="field" id="fieldBot" style="display:none"><label class="label">Moyenne du bot</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <input type="range" id="cfgBotLevel" min="20" max="120" step="5" value="60" style="width:100%">
+          <span class="net-code" id="botAvgLabel" style="min-width:76px;text-align:right">60</span>
+        </div>
+        <span class="stepper-hint" id="botAvgHint" style="text-align:left">De 20 (débutant) à 120 (niveau mondial). Le bot tente les vrais checkouts.</span>
+      </div>
+      <div class="rules-box" id="rulesBox">
+        <div class="rules-title">📖 Règles — <span id="rulesModeName">501</span></div>
+        <div class="rules-text" id="rulesText"></div>
+      </div>
+    </div>
+    <div class="setup-actions">
+      <button class="btn btn-primary" onclick="startGame()">🚀 Lancer la partie</button>
+      <button class="btn btn-ghost btn-sm" onclick="resumeSavedGame()" id="resumeBtn">🔄 Reprendre</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screenGame">
+  <div class="hud">
+    <div class="hud-top"><span class="hud-mode" id="hudMode">501 · DOUBLE OUT</span><span class="hud-turn" id="hudTurn">Tour</span></div>
+    <div class="hud-scores" id="hudScores"></div>
+  </div>
+  <div class="game-body">
+  <div class="game-left">
+    <div class="darts-display"><div class="dart-slot" id="slot0">—</div><div class="dart-slot" id="slot1">—</div><div class="dart-slot" id="slot2">—</div></div>
+    <div class="checkout" id="checkoutBox"><div class="co-label">💡 Checkout suggéré</div><div class="co-route" id="checkoutRoute"></div></div>
+    <div class="cricket-board hidden" id="cricketBoard"></div>
+    <div class="stats-bar">
+      <div class="stat-item"><div class="st-val" id="statAvg">0</div><div class="st-lbl">Moy.</div></div>
+      <div class="stat-item"><div class="st-val" id="statTurns">0</div><div class="st-lbl">Volées</div></div>
+      <div class="stat-item"><div class="st-val" id="statBest">0</div><div class="st-lbl">Meilleur</div></div>
+    </div>
+  </div>
+  <div class="game-right">
+    <div class="board-container">
+    <div class="board-toggle">
+      <button class="bt-btn selected" id="btnPad">⌨️ Pavé</button>
+      <button class="bt-btn" id="btnBoard">🎯 Cible</button>
+    </div>
+    <div id="padContainer">
+      <div class="multiplier-bar"><button class="mult-btn selected" data-m="1" onclick="setMult(1)">×1</button><button class="mult-btn" data-m="2" onclick="setMult(2)">×2</button><button class="mult-btn" data-m="3" onclick="setMult(3)">×3</button></div>
+      <div class="quick-scores" id="quickScores"><button class="qs-btn" onclick="quickScore(180)">180</button><button class="qs-btn" onclick="quickScore(140)">140</button><button class="qs-btn" onclick="quickScore(100)">100</button><button class="qs-btn" onclick="quickScore(60)">60</button><button class="qs-btn" onclick="quickScore(26)">26</button></div>
+      <div class="board-grid" id="boardGrid"></div>
+    </div>
+    <div id="boardContainer" class="hidden">
+      <svg id="dartboard" viewBox="0 0 700 700" role="img" aria-label="Cible de fléchettes"></svg>
+    </div>
+  </div>
+  <button class="btn btn-ghost btn-sm log-toggle-btn" id="logToggleBtn" onclick="toggleLog()">📜 Historique</button>
+  <div class="log-panel hidden" id="logPanel"></div>
+  </div>
+  </div>
+  <div class="controls"><button class="btn btn-ghost btn-sm" id="muteBtn" onclick="toggleMute()">🔊 Voix</button><button class="btn btn-ghost btn-sm" onclick="undoLast()">↩️ Undo</button><button class="btn btn-ghost btn-sm" onclick="skipTurn()">⏭️ Passer</button><button class="btn btn-ghost btn-sm" onclick="confirmQuit()">🚪 Quitter</button></div>
+</div>
+
+<div class="screen" id="screenSettings">
+  <div class="container">
+    <div class="screen-head"><h2>⚙️ Réglages</h2><button class="back-btn" onclick="showScreen('screenSetup')">← Retour</button></div>
+    <div class="card">
+      <div class="field"><label class="label">Couleur d'accent</label>
+        <select id="setAccent"><option value="orange">Orange</option><option value="bleu">Bleu</option><option value="vert">Vert</option><option value="violet">Violet</option><option value="blanc">Blanc</option></select>
+      </div>
+      <div class="field"><label class="label">Thème</label>
+        <select id="setTheme"><option value="dark" selected>Sombre</option><option value="light">Clair</option></select>
+      </div>
+      <div class="field"><label class="label">Écran OLED (noir profond)</label>
+        <select id="setOled"><option value="1" selected>Activé</option><option value="">Désactivé</option></select>
+      </div>
+      <div class="field"><label class="label">Voix par défaut</label>
+        <select id="setVoice"><option value="off">Désactivée</option><option value="fr">Français</option><option value="en">English</option></select>
+        <div id="voiceStatusHost" class="empty-note" style="padding:8px 0 0"></div>
+      </div>
+      <div class="field"><label class="label">Type de voix</label>
+        <select id="setGender"><option value="female">Féminine</option><option value="male">Masculine</option></select>
+      </div>
+      <div class="field"><label class="label">Effets sonores</label>
+        <select id="setSounds"><option value="1">Activés</option><option value="">Désactivés</option></select>
+      </div>
+      <div class="field"><label class="label">Volume des effets</label>
+        <select id="setVolume"><option value="1">Fort</option><option value="0.5" selected>Moyen</option><option value="0.25">Faible</option></select>
+      </div>
+      <div class="field"><label class="label">Saisie par défaut</label>
+        <select id="setInput"><option value="pad">Pavé de touches</option><option value="board">Cible interactive</option></select>
+      </div>
+      <div class="field"><label class="label">Vibration</label>
+        <select id="setVib"><option value="1">Activée</option><option value="">Désactivée</option></select>
+      </div>
+    </div>
+    <div class="card">
+      <div class="field"><label class="label">Maintenance</label>
+        <button class="btn btn-ghost btn-sm" onclick="clearSavedGame()">🗑️ Effacer la partie sauvegardée</button>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="clearSettings()">↩️ Réinitialiser les réglages</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screenStats">
+  <div class="container">
+    <div class="screen-head"><h2>📈 Statistiques</h2><button class="back-btn" onclick="showScreen('screenSetup')">← Retour</button></div>
+    <div class="card card-scroll"><div class="chart-title">Joueurs (toutes parties)</div><div id="statsProfiles"></div></div>
+    <div class="card"><div class="chart-title">Dernières parties</div><div id="statsHistory"></div></div>
+    <button class="btn btn-danger btn-sm" onclick="resetCareer()">🗑️ Effacer toutes les statistiques</button>
+  </div>
+</div>
+
+<div class="winner-overlay" id="winnerOverlay">
+  <div class="winner-trophy">🏆</div><div class="winner-name" id="winnerName"></div><div class="winner-sub" id="winnerSub"></div>
+  <div class="stats-grid" id="winnerStats"></div>
+  <div class="chart-container"><div class="chart-title">📈 Évolution du score</div><canvas id="chartScore" width="400" height="180"></canvas></div>
+  <div class="winner-buttons"><button class="btn btn-primary" onclick="backToSetup()">🔄 Rejouer</button><button class="btn btn-ghost" onclick="shareMatchStats()">📤 Partager les stats</button></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="net-overlay" id="netOverlay">
+  <div class="net-card">
+    <div class="screen-head"><h2>🌐 Partie en ligne</h2><button class="back-btn" onclick="closeNetPanel()">← Fermer</button></div>
+    <div id="netHome">
+      <div class="field" id="netServerField" style="display:none"><label class="label">Adresse du serveur (PC sur le même Wi-Fi)</label><input type="text" id="netServerAddr" placeholder="ex. 192.168.1.20:3210" inputmode="url" autocomplete="off"><span class="stepper-hint" style="text-align:left">Lance « npm run online » sur un PC du même réseau, puis saisis ici son adresse. Les autres joueurs scannent le QR ou rejoignent par code.</span></div>
+      <div class="btn-row"><button class="btn btn-primary" onclick="netHost()">📡 Créer une partie (hôte)</button></div>
+      <div class="card" style="margin-top:14px">
+        <div class="field"><label class="label">Votre pseudo</label><input type="text" id="netName" maxLength="12" placeholder="Joueur"></div>
+        <div class="field"><label class="label">Code de la partie</label><input type="text" id="netCode" maxLength="6" placeholder="AB12CD" style="text-transform:uppercase"></div>
+        <div id="netJoinErr" class="net-err"></div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="netJoin()">🔗 Rejoindre</button></div>
+      </div>
+    </div>
+    <div id="netLobby" style="display:none">
+      <div class="card"><div class="chart-title">Code de la partie : <span class="net-code" id="netRoomCode"></span></div><img id="netQr" alt="QR code" style="display:block;margin:12px auto 0;max-width:200px;border-radius:10px"><div id="netWait" class="net-wait"></div></div>
+      <div class="card"><div class="chart-title">Joueurs connectés</div><div id="netPlayers"></div>
+        <div class="btn-row"><button class="btn btn-primary" id="netLaunchBtn" onclick="netLaunch()">🚀 Lancer la partie</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/sounds.js"></script>
+<script src="js/net.js"></script>
+<script src="js/voice.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/dartboard.js"></script>
+<script src="js/game.js"></script>
+<script src="js/bot2.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/boot.js"></script>
+<script>
+/* Hors-ligne : cache PWA + masquage du mode "En ligne" sans réseau. */
+(function(){
+  if('serviceWorker' in navigator){
+    window.addEventListener('load',function(){
+      try{navigator.serviceWorker.register('sw.js').catch(function(){})}catch(e){}
+    });
+  }
+  function hideNetIfOffline(){
+    try{
+      if(!navigator.onLine){
+        var b=document.querySelector('.quick-nav button[onclick*="openNetPanel"]');
+        if(b)b.style.display='none';
+      }
+    }catch(e){}
+  }
+  if(document.readyState!=='loading')hideNetIfOffline();
+  else document.addEventListener('DOMContentLoaded',hideNetIfOffline);
+  window.addEventListener('offline',hideNetIfOffline);
+  window.addEventListener('online',function(){
+    try{
+      var b=document.querySelector('.quick-nav button[onclick*="openNetPanel"]');
+      if(b)b.style.display='';
+    }catch(e){}
+  });
+})();
+</script>
+</body>
+</html>
