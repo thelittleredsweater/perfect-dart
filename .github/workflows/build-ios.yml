@@ -17,6 +17,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+      - name: Restore zsign executable bit
+        run: chmod +x node_modules/nitron/vendor/zsign/linux/zsign
 
       - name: Build iOS IPA (ad-hoc signed)
         run: npx nitron build --target ios
