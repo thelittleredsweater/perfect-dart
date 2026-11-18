@@ -1,0 +1,24 @@
+{
+  "name": "Perfect Dart",
+  "packageId": "com.greg.perfectdarts",
+  "version": "1.5.0",
+  "entry": "index.html",
+  "exclude": [
+    "server.cjs",
+    "tests",
+    "tools",
+    "TESTS-TERRAIN.md"
+  ],
+  "icon": "img/icons/app-icon.png",
+  "orientation": "auto",
+  "statusBar": true,
+  "permissions": [
+    "INTERNET"
+  ],
+  "network": {
+    "cleartext": true
+  },
+  "webview": {
+    "backButton": "history"
+  }
+}
