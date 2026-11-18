@@ -1,0 +1,15 @@
+{
+  "name": "Perfect Darts",
+  "short_name": "Darts",
+  "description": "Le compteur qui te fait progresser",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07091a",
+  "theme_color": "#07091a",
+  "icons": [
+    { "src": "img/icons/app-icon.png", "sizes": "any", "type": "image/png", "purpose": "any" },
+    { "src": "img/icons/app-icon.png", "sizes": "any", "type": "image/png", "purpose": "maskable" }
+  ]
+}
