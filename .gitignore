@@ -4,3 +4,5 @@ tools/
 tests/*.log
 tests/*.png
 *.DS_Store
+relay/public/
+relay/.wrangler/

@@ -18,13 +18,15 @@ function updatePlayerInputs(){const grid=document.getElementById('playerNamesGri
 function isPracticeMode(){return PRACTICE_MODES.includes(STATE.mode)}
 function isX01Mode(){return typeof STATE.mode==='number'}
 function practicePlayerName(){const el=document.getElementById('playerName1');return (el&&el.value.trim())||'Entraînement'}
-function createPlayer(name,isBot){return{name,isBot,started:false,score:isX01Mode()?STATE.mode:0,turns:0,totalScored:0,dartsThrown:0,bestTurn:0,count180:0,count140:0,count100:0,count60:0,busts:0,doublesAttempted:0,doublesHit:0,checkouts:0,checkoutsAttempted:0,scoreHistory:[isX01Mode()?STATE.mode:0],turnHistory:[]}}
+function createPlayer(name,isBot){return{name,isBot,started:false,legs:0,sets:0,legsTotal:0,score:isX01Mode()?STATE.mode:0,turns:0,totalScored:0,dartsThrown:0,bestTurn:0,count180:0,count140:0,count100:0,count60:0,busts:0,doublesAttempted:0,doublesHit:0,checkouts:0,checkoutsAttempted:0,scoreHistory:[isX01Mode()?STATE.mode:0],turnHistory:[]}}
 function clampBotAvg(v){return Math.max(BOT_MIN,Math.min(BOT_MAX,parseInt(v,10)||BOT_DEFAULT))}
 
-function startGame(){
+function startGame(forcedNames,meta){
   gameSession++;STATE.visitClosing=false;clearTimeout(visitTimer);visitTimer=null;
   let onlineNames=null;
-  if(window.NET&&NET.mode==='host'){onlineNames=[(document.getElementById('playerName1')||{value:''}).value.trim()||'Hôte'].concat(NET.roster.map(r=>r.name||`Joueur ${r.seat+1}`))}
+  if(window.NET&&NET.mode==='host'&&NET.started){onlineNames=[(document.getElementById('playerName1')||{value:''}).value.trim()||'Hôte'].concat(NET.roster.map(r=>r.name||`Joueur ${r.seat+1}`))}
+  if(Array.isArray(forcedNames)&&!onlineNames)onlineNames=forcedNames.slice();
+  STATE.tournamentMatch=(meta&&meta.tournamentMatch)||null;
   const n=onlineNames?onlineNames.length:PLAYER_COUNT;
   savePlayerNames();
   STATE.mode=isNaN(document.getElementById('cfgMode').value)?document.getElementById('cfgMode').value:parseInt(document.getElementById('cfgMode').value,10);
@@ -33,6 +35,10 @@ function startGame(){
   STATE.cutThroat=!!(document.getElementById('cfgCutThroat')||{}).checked;
   STATE.aroundVariant=parseInt((document.getElementById('cfgAround')||{value:'1'}).value,10)||1;
   STATE.botAvg=clampBotAvg((document.getElementById('cfgBotLevel')||{value:SETTINGS.botAvg}).value);
+  /* Format du match (X01) : meilleur de N legs, éventuellement en sets. */
+  STATE.legsBestOf=isX01Mode()?(parseInt((document.getElementById('cfgLegs')||{value:'1'}).value,10)||1):1;
+  STATE.setsBestOf=isX01Mode()?(parseInt((document.getElementById('cfgSets')||{value:'1'}).value,10)||1):1;
+  STATE.legStarter=0;STATE.setStarter=0;STATE.legNumber=1;
   const voice=(document.getElementById('cfgVoice')||{value:SETTINGS.voiceLang}).value;
   STATE.voiceLang=voice;voiceLang=voice;
   STATE.players=[];
@@ -45,22 +51,24 @@ function startGame(){
   }else{
     STATE.maxTurns=0;STATE.lives=0;STATE.bobsRound=0;
     for(let i=1;i<=n;i++){const name=onlineNames?onlineNames[i-1]:(document.getElementById(`playerName${i}`).value.trim()||`Joueur ${i}`);STATE.players.push(createPlayer(name,false))}
-    if(n===1)STATE.players.push(createPlayer('🤖 DartBot',true));
+    if(n===1)STATE.players.push(makeSoloOpponent(STATE.players[0].name));
     STATE.cricketMarks={};STATE.aroundClock={};
     if(STATE.mode==='cricket')STATE.players.forEach((p,i)=>{STATE.cricketMarks[i]={20:0,19:0,18:0,17:0,16:0,15:0,25:0}});
     if(STATE.mode==='around')STATE.players.forEach((p,i)=>{STATE.aroundClock[i]=1});
   }
+  initModeState();
+  STATE.log=[];applyHandicap();
   STATE.currentPlayer=0;STATE.dartsThisTurn=[];STATE.currentMult=1;
-  STATE.history=[];STATE.log=[];STATE.turnCount=0;STATE.gameOver=false;
+  STATE.history=[];STATE.turnCount=0;STATE.gameOver=false;
   STATE.isBotTurn=false;STATE.botShowing=false;STATE.startTime=Date.now();STATE.throwHistory=[];
   showScreen('screenGame');buildBoard();applyQuickScoresVisibility();setInputMethod(SETTINGS.inputMethod);
   renderAll();saveGame();playEvent('start');maybeBotTurn();
 }
 
 /* ================== Pavé et cible ================== */
-function buildBoard(){const grid=document.getElementById('boardGrid');grid.innerHTML='';if(STATE.mode==='cricket'){[20,19,18,17,16,15].forEach(n=>{const btn=document.createElement('button');btn.className='num-btn';btn.textContent=n;btn.onclick=()=>throwDart(n);grid.appendChild(btn)});const bull=document.createElement('button');bull.className='num-btn bull';bull.textContent='🎯 BULL (25)';bull.onclick=()=>throwDart(25);grid.appendChild(bull);const miss=document.createElement('button');miss.className='num-btn miss';miss.textContent='✕ Manqué (0)';miss.onclick=()=>throwDart(0);grid.appendChild(miss);return}
-const order=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];order.forEach(n=>{const btn=document.createElement('button');btn.className='num-btn';btn.textContent=n;btn.onclick=()=>throwDart(n);grid.appendChild(btn)});const bull=document.createElement('button');bull.className='num-btn bull';bull.textContent='🎯 BULL (25)';bull.onclick=()=>throwDart(25);grid.appendChild(bull);const miss=document.createElement('button');miss.className='num-btn miss';miss.textContent='✕ Manqué (0)';miss.onclick=()=>throwDart(0);grid.appendChild(miss)}
-function applyQuickScoresVisibility(){const qs=document.getElementById('quickScores');if(!qs)return;const blocked=['cricket','around','bobs27','catch40'].includes(STATE.mode)||STATE.doubleIn;qs.style.display=blocked?'none':'grid'}
+function buildBoard(){const grid=document.getElementById('boardGrid');grid.innerHTML='';if(STATE.mode==='cricket'){[20,19,18,17,16,15,25].forEach(n=>{const btn=document.createElement('button');btn.className='num-btn crk-btn'+(n===25?' bull':'');btn.dataset.crk=n;btn.innerHTML=`<span class="cb-lab">${n===25?'BULL':n}</span><span class="cb-mk"></span>`;btn.onclick=()=>throwDart(n);grid.appendChild(btn)});const miss=document.createElement('button');miss.className='num-btn miss';miss.textContent='✕ Manqué (0)';miss.onclick=()=>throwDart(0);grid.appendChild(miss);return}
+const order=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];order.forEach(n=>{const btn=document.createElement('button');btn.className='num-btn';btn.dataset.n=n;btn.textContent=n;btn.onclick=()=>throwDart(n);grid.appendChild(btn)});const bull=document.createElement('button');bull.className='num-btn bull';bull.dataset.n=25;bull.textContent='🎯 BULL (25)';bull.onclick=()=>throwDart(25);grid.appendChild(bull);const miss=document.createElement('button');miss.className='num-btn miss';miss.textContent='✕ Manqué (0)';miss.onclick=()=>throwDart(0);grid.appendChild(miss)}
+function applyQuickScoresVisibility(){const qs=document.getElementById('quickScores');if(!qs)return;const blocked=['cricket','around','bobs27','catch40'].concat(EXTRA_MODES).includes(STATE.mode)||STATE.doubleIn;qs.style.display=blocked?'none':'grid'}
 function setMult(m){if(STATE.isBotTurn||STATE.gameOver)return;STATE.currentMult=m;document.querySelectorAll('.mult-btn').forEach(b=>b.classList.remove('selected'));const btn=document.querySelector(`.mult-btn[data-m="${m}"]`);if(btn)btn.classList.add('selected')}
 
 /* ================== Volée en cours ================== */
@@ -82,15 +90,16 @@ function throwDart(baseValue,forcedMult){
   buzz(10);
   STATE.dartsThisTurn.push({baseValue,value,label,mult});
   announceDart(STATE.dartsThisTurn[STATE.dartsThisTurn.length-1]);
-  setMult(1);renderDarts();renderStats();renderCheckout();
+  setMult(1);renderHUD();renderDarts();renderStats();renderCheckout();renderCricketBoard();netLiveSync();
   if(STATE.dartsThisTurn.length===3){scheduleVisitEnd(450)}
   else if(isX01Mode()){const r=remainingAfterVisit();if(r<=0||(STATE.finishDouble&&r===1))scheduleVisitEnd(450)}
   else if(STATE.mode==='around'&&aroundTargetAfter(STATE.currentPlayer,STATE.dartsThisTurn)>21)scheduleVisitEnd(450);
+  else if(STATE.mode==='co121'){const r=co121Remaining();if(r<=1)scheduleVisitEnd(450)}
 }
 function quickScore(total){
   if(window.NET&&NET.mode==='client'){netSend({t:'quick',value:total});return}
   if(STATE.gameOver||STATE.isBotTurn||STATE.visitClosing)return;
-  if(['cricket','around','bobs27','catch40'].includes(STATE.mode))return;
+  if(['cricket','around','bobs27','catch40'].concat(EXTRA_MODES).includes(STATE.mode))return;
   if(STATE.dartsThisTurn.length>0){showToast('Termine la volée en cours','error');return}
   buzz(14);
   STATE.dartsThisTurn=[{baseValue:-1,value:total,label:`Volée ${total}`,mult:1,ndarts:3}];
@@ -98,6 +107,8 @@ function quickScore(total){
 }
 let visitTimer=null,gameSession=0;
 function scheduleVisitEnd(delay){STATE.visitClosing=true;const sid=gameSession;clearTimeout(visitTimer);visitTimer=setTimeout(()=>{if(sid!==gameSession)return;visitTimer=null;endTurn()},delay)}
+/* Diffusion immédiate de chaque fléchette (joueurs distants, grand écran TV). */
+function netLiveSync(){if(window.NET&&NET.mode==='host'&&(NET.started||NET.tv)&&NET.syncState)NET.syncState()}
 function visitDarts(){return STATE.dartsThisTurn.reduce((s,d)=>s+(d.ndarts||1),0)}
 function remainingAfterVisit(){return STATE.players[STATE.currentPlayer].score-STATE.dartsThisTurn.reduce((s,d)=>s+d.value,0)}
 
@@ -107,6 +118,7 @@ function endTurn(){
   if(STATE.gameOver||STATE.dartsThisTurn.length===0)return;
   saveState();
   const player=STATE.players[STATE.currentPlayer];
+  tallyHits(player);
   if(applyVisitResult(player)){STATE.isBotTurn=false;STATE.botShowing=false;return}
   /* Bot : on laisse le nouveau score affiché un moment avant de passer la main. */
   if(player.isBot&&STATE.isBotTurn&&BOT_DELAYS.next>0){
@@ -125,13 +137,20 @@ function applyVisitResult(player){
     case 'bobs27':return applyBobsResult(player);
     case 'catch40':return applyCatch40Result(player);
     case 'highscore':return applyHighscoreResult(player);
+    case 'shanghai':return applyShanghaiResult(player);
+    case 'killer':return applyKillerResult(player);
+    case 'co121':return applyCo121Result(player);
+    case 'doubles':return applyDoublesResult(player);
     default:return applyX01Result(player);
   }
 }
 function finishVisitTurn(){
   STATE.botShowing=false;STATE.turnCount++;STATE.dartsThisTurn=[];
   STATE.currentPlayer=(STATE.currentPlayer+1)%STATE.players.length;
+  skipInactive();
   renderAll();saveGame();
+  /* Arbitre : « Il vous reste N » si le joueur suivant a un finish possible. */
+  if(isX01Mode()&&!STATE.gameOver){const np=STATE.players[STATE.currentPlayer];if(np&&(!STATE.doubleIn||np.started)&&checkoutRoute(np.score,3,STATE.finishDouble))announceRemaining(np.score)}
   const sid=gameSession;
   setTimeout(()=>{if(sid===gameSession)maybeBotTurn()},600);
 }
@@ -150,7 +169,7 @@ function applyX01Result(player){
   if(newScore<0){isBust=true;logMsg=`💥 BUST ${player.name} : ${total} (score négatif) — reste ${player.score}`;logCls='bust-log'}
   else if(newScore===1&&STATE.finishDouble){isBust=true;logMsg=`💥 BUST ${player.name} : ${total} (reste 1) — reste ${player.score}`;logCls='bust-log'}
   else if(newScore===0&&STATE.finishDouble){const last=eff[eff.length-1];if(!last||last.mult!==2){isBust=true;logMsg=`💥 BUST ${player.name} : finish sans double`;logCls='bust-log'}}
-  if(STATE.finishDouble&&!eff.some(d=>d.ndarts)){let rem=player.score;for(const d of eff){if(rem===50||(rem>=2&&rem<=40&&rem%2===0))player.doublesAttempted++;rem-=d.value;if(rem<=1)break}
+  if(STATE.finishDouble&&!eff.some(d=>d.ndarts)){let rem=player.score;for(const d of eff){if(rem===50||(rem>=2&&rem<=40&&rem%2===0)){player.doublesAttempted++;const seg=rem===50?25:rem/2;recordDoubleAttempt(player,seg,d.mult===2&&d.baseValue===seg)}rem-=d.value;if(rem<=1)break}
     if(newScore===0&&!isBust)player.doublesHit++}
   if(player.score<=CHECKOUT_MAX&&(CHECKOUTS[player.score]||!STATE.finishDouble)&&(!STATE.doubleIn||player.started))player.checkoutsAttempted++;
   const dartsBefore=player.dartsThrown;
@@ -166,11 +185,13 @@ function applyX01Result(player){
     player.turnHistory.push(total);player.scoreHistory.push(newScore);
     if(total===180)player.count180++;if(total>=140)player.count140++;if(total>=100)player.count100++;if(total>=60)player.count60++;
     if(newScore===0){player.checkouts++;announceCheckout();
+      player.hiCo=Math.max(player.hiCo||0,total);{const ld=player.dartsThrown-(player.legDart0||0);if(!player.bestLeg||ld<player.bestLeg)player.bestLeg=ld}
       logMsg=`🎯 CHECKOUT ${player.name} : ${eff.map(d=>d.label).join(' + ')} = ${total} !`;
       STATE.log.unshift({msg:logMsg,cls:'checkout-log'});
       STATE.throwHistory.push({player:player.name,darts:[...eff],total,bust:false,remaining:0});
+      if(isMatchFormat()){winLeg(player);return true}
       endGame(player);return true}
-    netAnnounce(total,newScore);
+    netAnnounce(total,newScore);announceVisitScore(total);
     const turnLabels=eff.map(d=>d.label).join(' + ');
     logMsg=`${player.name} : ${turnLabels} = ${total} → reste ${newScore}`;
     if(total>=100){logCls='highlight';playEvent(total===180?'perfect':'big')}
@@ -178,6 +199,33 @@ function applyX01Result(player){
   }
   STATE.throwHistory.push({player:player.name,darts:[...eff],total,bust:isBust,remaining:player.score});
   return false;
+}
+
+/* ================== Format de match : legs / sets ==================
+   Meilleur de N legs (premier à floor(N/2)+1). Avec des sets, chaque set se joue
+   au meilleur de N legs et le match au meilleur de M sets. Le joueur qui commence
+   alterne à chaque leg (et à chaque set pour le premier leg du set). */
+function isMatchFormat(){return isX01Mode()&&((STATE.legsBestOf||1)>1||(STATE.setsBestOf||1)>1)}
+function legsToWin(){return Math.floor((STATE.legsBestOf||1)/2)+1}
+function setsToWin(){return Math.floor((STATE.setsBestOf||1)/2)+1}
+function matchScoreText(){if(!isMatchFormat())return'';const sets=(STATE.setsBestOf||1)>1;return STATE.players.map(p=>sets?(p.sets||0)+' sets':(p.legs||0)).join(sets?' / ':'-')+(sets?'':' en legs')}
+function winLeg(player){
+  const n=STATE.players.length,useSets=(STATE.setsBestOf||1)>1;
+  player.legs=(player.legs||0)+1;player.legsTotal=(player.legsTotal||0)+1;
+  let setWon=false;
+  if(useSets&&player.legs>=legsToWin()){player.sets=(player.sets||0)+1;setWon=true}
+  if(useSets?player.sets>=setsToWin():player.legs>=legsToWin()){endGame(player);return}
+  if(setWon){STATE.players.forEach(p=>{p.legs=0});STATE.setStarter=((STATE.setStarter||0)+1)%n;STATE.legStarter=STATE.setStarter}
+  else STATE.legStarter=((STATE.legStarter||0)+1)%n;
+  STATE.legNumber=(STATE.legNumber||1)+1;
+  STATE.players.forEach(p=>{p.score=p.start||STATE.mode;p.started=false;p.legDart0=p.dartsThrown;p.scoreHistory.push(p.score)});
+  const msg=setWon?`🏆 Set pour ${player.name} !`:`🏆 Leg pour ${player.name} !`;
+  STATE.log.unshift({msg:msg+' — '+matchScoreText(),cls:'checkout-log'});
+  STATE.turnCount++;STATE.dartsThisTurn=[];STATE.currentPlayer=STATE.legStarter;
+  playEvent('big');showToast(msg,'success');
+  renderAll();saveGame();
+  const sid=gameSession;
+  setTimeout(()=>{if(sid===gameSession)maybeBotTurn()},1500);
 }
 
 /* ================== Cricket (+ cut-throat) ================== */
@@ -202,6 +250,7 @@ function applyCricketResult(player){
       if(!allClosed)scored+=extra*target;
     }
   });
+  player.crkMarks=(player.crkMarks||0)+STATE.dartsThisTurn.reduce((n,d)=>n+(targets.includes(d.baseValue)?(d.mult||1):0),0);
   player.turns++;player.dartsThrown+=STATE.dartsThisTurn.length;
   if(!STATE.cutThroat)player.score+=scored;
   const gained=STATE.cutThroat?dealt:scored;
@@ -262,6 +311,7 @@ function applyCatch40Result(player){
   if(total>player.bestTurn)player.bestTurn=total;
   player.turnHistory.push(total);player.scoreHistory.push(player.score);
   if(total===180)player.count180++;if(total>=100)player.count100++;
+  announceVisitScore(total);
   if(total<CATCH40_MIN)STATE.lives--;
   STATE.log.unshift({msg:`Catch 40 · volée ${player.turns} : ${total}${total<CATCH40_MIN?` — vie perdue (${STATE.lives} restantes)`:''}`,cls:total<CATCH40_MIN?'bust-log':'highlight'});
   if(STATE.lives<=0){endPractice(player,false,`Volée sous ${CATCH40_MIN} : ${total} points`);return true}
@@ -277,6 +327,7 @@ function applyHighscoreResult(player){
   if(total>player.bestTurn)player.bestTurn=total;
   player.turnHistory.push(total);player.scoreHistory.push(player.score);
   if(total===180)player.count180++;if(total>=140)player.count140++;if(total>=100)player.count100++;if(total>=60)player.count60++;
+  announceVisitScore(total);
   STATE.log.unshift({msg:`Highscore volée ${player.turns} : ${total}`,cls:total>=100?'highlight':''});
   if(player.turns>=HIGHSCORE_TURNS){endPractice(player,true,`Total : ${player.score} en ${HIGHSCORE_TURNS} volées`);return true}
   return false;
@@ -399,12 +450,15 @@ function maybeBotTurn(){
     if(sid!==gameSession)return;
     if(count>=3||STATE.gameOver){setTimeout(()=>{if(sid!==gameSession)return;endTurn()},BOT_DELAYS.end);return}
     const remaining=player.score-STATE.dartsThisTurn.reduce((s,d)=>s+d.value,0);
-    const dart=STATE.mode==='around'
+    const dart=player.ghost?ghostDart(player)
+      :STATE.mode==='around'
       ?simulateAroundDart(avg,aroundTargetAfter(STATE.currentPlayer,STATE.dartsThisTurn))
       :STATE.mode==='cricket'
         ?botCricketDart(avg)
+        :STATE.mode==='shanghai'?botShanghaiDart(avg)
+        :STATE.mode==='killer'?botKillerDart(avg)
         :botDart(remaining,STATE.dartsThisTurn.length,avg);
-    STATE.dartsThisTurn.push(dart);renderDarts();announceDart(dart);count++;
+    STATE.dartsThisTurn.push(dart);renderHUD();renderDarts();renderCheckout();renderCricketBoard();netLiveSync();announceDart(dart);count++;
     if(isX01Mode()){const r=remaining-dart.value;if(r<=0||(STATE.finishDouble&&r===1))count=3}
     else if(STATE.mode==='around'&&aroundTargetAfter(STATE.currentPlayer,STATE.dartsThisTurn)>21)count=3;
     setTimeout(throwNext,BOT_DELAYS.dart);
@@ -413,7 +467,7 @@ function maybeBotTurn(){
 }
 
 /* ================== Undo / passer / quitter ================== */
-function saveState(){STATE.history.push({players:JSON.parse(JSON.stringify(STATE.players)),currentPlayer:STATE.currentPlayer,log:JSON.parse(JSON.stringify(STATE.log)),turnCount:STATE.turnCount,throwHistory:JSON.parse(JSON.stringify(STATE.throwHistory)),cricketMarks:JSON.parse(JSON.stringify(STATE.cricketMarks)),aroundClock:JSON.parse(JSON.stringify(STATE.aroundClock)),darts:JSON.parse(JSON.stringify(STATE.dartsThisTurn)),bobsRound:STATE.bobsRound,lives:STATE.lives});if(STATE.history.length>100)STATE.history.shift()}
+function saveState(){STATE.history.push({players:JSON.parse(JSON.stringify(STATE.players)),currentPlayer:STATE.currentPlayer,log:JSON.parse(JSON.stringify(STATE.log)),turnCount:STATE.turnCount,throwHistory:JSON.parse(JSON.stringify(STATE.throwHistory)),cricketMarks:JSON.parse(JSON.stringify(STATE.cricketMarks)),aroundClock:JSON.parse(JSON.stringify(STATE.aroundClock)),darts:JSON.parse(JSON.stringify(STATE.dartsThisTurn)),bobsRound:STATE.bobsRound,lives:STATE.lives,legStarter:STATE.legStarter,setStarter:STATE.setStarter,legNumber:STATE.legNumber,ms:JSON.parse(JSON.stringify(STATE.ms||{}))});if(STATE.history.length>100)STATE.history.shift()}
 function undoLast(){
   if(window.NET&&NET.mode==='client'){netSend({t:'undo'});return}
   if(STATE.isBotTurn)return;
@@ -433,6 +487,8 @@ function undoLast(){
   STATE.cricketMarks=prev.cricketMarks;STATE.aroundClock=prev.aroundClock;
   if(prev.bobsRound!==undefined)STATE.bobsRound=prev.bobsRound;
   if(prev.lives!==undefined)STATE.lives=prev.lives;
+  if(prev.ms!==undefined)STATE.ms=prev.ms;
+  if(prev.legStarter!==undefined){STATE.legStarter=prev.legStarter;STATE.setStarter=prev.setStarter;STATE.legNumber=prev.legNumber}
   STATE.botShowing=false;
   const darts=prev.darts||[];
   /* Volée saisie d'un bloc (quickScore) ou « passé » : rien à remettre. */
@@ -447,12 +503,14 @@ function skipTurn(){
   endTurn();
 }
 function confirmQuit(){
-  if(confirm('Quitter la partie en cours ?')){
+  askConfirm('Quitter la partie en cours ? Elle reste sauvegardée : « Reprendre » la relance.','🚪 Quitter la partie','Continuer à jouer',ok=>{
+    if(!ok)return;
     gameSession++;visitTimer=null;STATE.visitClosing=false;STATE.isBotTurn=false;STATE.botShowing=false;
     saveGame();
-    if(window.NET&&NET.ws){NET.started=false;try{NET.ws.close()}catch(e){}NET.ws=null}
+    /* Partie en ligne : on quitte le salon. Diffusion TV seule : elle continue. */
+    if(window.NET&&NET.ws&&NET.started){NET.started=false;try{NET.ws.close()}catch(e){}NET.ws=null}
     showScreen('screenSetup');
-  }
+  });
 }
 
 /* ================== Fin de partie / entraînement ================== */
@@ -488,16 +546,16 @@ function endGame(winner){
   }
   const duration=Math.floor((Date.now()-STATE.startTime)/1000);
   const mins=Math.floor(duration/60),secs=duration%60;
-  showWinnerOverlay(winner,`${winner.name} a gagné !`,`${fmtMode(STATE.mode)} · ${winner.turns} volées · ${mins}m${secs.toString().padStart(2,'0')}s`);
-  recordGameToCareer(winner,{duration});
+  showWinnerOverlay(winner,`${winner.name} a gagné !`,`${fmtMode(STATE.mode)}${isMatchFormat()?' · '+matchScoreText():''} · ${winner.turns} volées · ${mins}m${secs.toString().padStart(2,'0')}s`);
+  recordGameToCareer(winner,{duration});renderNewRecords();saveDoubleStats();saveHitStats();recordGhost(winner);if(STATE.tournamentMatch)tournamentRecordResult(winner);
   saveGame();updateResumeBtn();
 }
 function endPractice(player,success,sub){
-  STATE.gameOver=true;playEvent(success?'win':'big');
-  showWinnerOverlay(player,success?`${player.name} a réussi !`:'Échec…',`${fmtMode(STATE.mode)} · ${sub}`);
+  STATE.gameOver=true;saveDoubleStats();saveHitStats();recordTraining(player,success);playEvent(success?'win':'big');
+  showWinnerOverlay(player,success?`${player.name} a réussi !`:'Échec…',`${fmtMode(STATE.mode)} · ${sub}`);renderNewRecords();
   saveGame();updateResumeBtn();
 }
-function backToSetup(){document.getElementById('winnerOverlay').classList.remove('active');try{localStorage.removeItem(STORAGE_KEY)}catch(e){}showScreen('screenSetup');updateResumeBtn();updatePlayerInputs()}
+function backToSetup(){document.getElementById('winnerOverlay').classList.remove('active');try{localStorage.removeItem(STORAGE_KEY)}catch(e){}if(STATE.tournamentMatch){STATE.tournamentMatch=null;openTournament();return}showScreen('screenSetup');updateResumeBtn();updatePlayerInputs()}
 
 /* ================== Graphique (overlay victoire) ================== */
 function renderScoreChart(player){
@@ -526,6 +584,7 @@ function saveGame(){
       finishDouble:STATE.finishDouble,doubleIn:STATE.doubleIn,cutThroat:STATE.cutThroat,
       aroundVariant:STATE.aroundVariant,botAvg:STATE.botAvg,
       maxTurns:STATE.maxTurns,lives:STATE.lives,bobsRound:STATE.bobsRound,
+      tournamentMatch:STATE.tournamentMatch||null,handicap:!!STATE.handicap,legsBestOf:STATE.legsBestOf,setsBestOf:STATE.setsBestOf,legStarter:STATE.legStarter,setStarter:STATE.setStarter,legNumber:STATE.legNumber,ms:STATE.ms||{},
       voiceLang:STATE.voiceLang,dartsThisTurn:STATE.dartsThisTurn,
       history:STATE.history.slice(-30),log:STATE.log.slice(0,30),turnCount:STATE.turnCount,
       gameOver:STATE.gameOver,startTime:STATE.startTime,throwHistory:STATE.throwHistory,
@@ -539,7 +598,7 @@ function resumeSavedGame(){
   const save=loadGameSave();
   if(!save){showToast('Aucune partie sauvegardée','error');return}
   if(save.gameOver){showToast('La partie est terminée','error');return}
-  Object.assign(STATE,{players:save.players||[],currentPlayer:save.currentPlayer||0,mode:save.mode,finishDouble:save.finishDouble,doubleIn:!!save.doubleIn,cutThroat:!!save.cutThroat,aroundVariant:save.aroundVariant||1,botAvg:clampBotAvg(save.botAvg),maxTurns:save.maxTurns||0,lives:save.lives||0,bobsRound:save.bobsRound||0,voiceLang:save.voiceLang,dartsThisTurn:save.dartsThisTurn||[],botShowing:false,isBotTurn:false,history:save.history||[],log:save.log||[],turnCount:save.turnCount,gameOver:false,startTime:save.startTime,throwHistory:save.throwHistory||[],cricketMarks:save.cricketMarks||{},aroundClock:save.aroundClock||{}});
+  Object.assign(STATE,{players:save.players||[],currentPlayer:save.currentPlayer||0,mode:save.mode,finishDouble:save.finishDouble,doubleIn:!!save.doubleIn,cutThroat:!!save.cutThroat,aroundVariant:save.aroundVariant||1,botAvg:clampBotAvg(save.botAvg),maxTurns:save.maxTurns||0,lives:save.lives||0,bobsRound:save.bobsRound||0,voiceLang:save.voiceLang,dartsThisTurn:save.dartsThisTurn||[],botShowing:false,isBotTurn:false,legsBestOf:save.legsBestOf||1,setsBestOf:save.setsBestOf||1,legStarter:save.legStarter||0,setStarter:save.setStarter||0,legNumber:save.legNumber||1,ms:save.ms||{},tournamentMatch:save.tournamentMatch||null,handicap:!!save.handicap,history:save.history||[],log:save.log||[],turnCount:save.turnCount,gameOver:false,startTime:save.startTime,throwHistory:save.throwHistory||[],cricketMarks:save.cricketMarks||{},aroundClock:save.aroundClock||{}});
   voiceLang=STATE.voiceLang;
   showScreen('screenGame');buildBoard();applyQuickScoresVisibility();setInputMethod(SETTINGS.inputMethod);renderAll();
   if(STATE.dartsThisTurn.length>=3){endTurn()}else{maybeBotTurn()}
@@ -570,6 +629,9 @@ function getLeaderIndex(){
     STATE.players.forEach((p,i)=>{if((STATE.aroundClock[i]||0)>bestVal){bestVal=STATE.aroundClock[i];best=i}});
     return best;
   }
+  if(['shanghai','co121','doubles','killer'].includes(STATE.mode)){
+    let b=0;STATE.players.forEach((p,i)=>{if(p.score>STATE.players[b].score)b=i});return b;
+  }
   let best=0,bestVal=Infinity;
   STATE.players.forEach((p,i)=>{if(p.score<bestVal&&p.score>0){bestVal=p.score;best=i}});
   return best;
@@ -581,5 +643,6 @@ function hudTurnLabel(){
   if(STATE.mode==='bobs27')return`Bob's 27 · Double ${STATE.bobsRound>=BOBS_ROUNDS?'Bull':STATE.bobsRound} · volée ${p.turns+1}/${BOBS_ROUNDS}`;
   if(STATE.mode==='catch40')return`Catch 40 · ${'♥'.repeat(Math.max(0,STATE.lives))||'—'} · volée ${p.turns+1}/${CATCH40_TURNS}`;
   if(STATE.mode==='highscore')return`Highscore ${p.turns+1}/${HIGHSCORE_TURNS}`;
+  const ml=modeTurnLabel(p);if(ml)return ml;
   return'Tour de '+p.name;
 }

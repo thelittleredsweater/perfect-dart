@@ -1,7 +1,7 @@
 {
   "name": "Perfect Darts",
   "packageId": "com.greg.perfectdarts",
-  "version": "1.5.2",
+  "version": "1.7.0",
   "entry": "index.html",
   "exclude": [
     ".github",
@@ -10,6 +10,9 @@
     "apk-qr.png",
     "dist",
     "node_modules",
+    "relay",
+    "site",
+    "scripts",
     "server.cjs",
     "tests",
     "tests-run.log",
@@ -27,5 +30,6 @@
   },
   "webview": {
     "backButton": "history"
-  }
+  },
+  "targetSdkVersion": 35
 }

@@ -2,7 +2,7 @@
    Stratégie : assets statiques en cache-first (précalculés), navigation en
    network-first (une connexion propage les mises à jour), /qr jamais caché. */
 'use strict';
-var VERSION = 'pd-offline-v1.5.2';
+var VERSION = 'pd-offline-v1.7.0';
 var CORE_CACHE = 'pd-core-' + VERSION;
 
 var PRECACHE = [
@@ -10,12 +10,17 @@ var PRECACHE = [
   'css/app.css',
   'js/boot.js',
   'js/bot2.js',
+  'js/modes.js',
+  'js/tournament.js',
+  'js/tv.js',
+  'js/cast.js',
   'js/config.js',
   'js/dartboard.js',
   'js/game.js',
   'js/net.js',
   'js/sounds.js',
   'js/stats.js',
+  'js/coach.js',
   'js/ui.js',
   'js/voice.js',
   'img/game-bg.jpg',

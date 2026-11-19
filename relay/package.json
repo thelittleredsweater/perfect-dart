@@ -1,0 +1,21 @@
+{
+  "name": "perfect-darts-relay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../scripts/build-web.cjs",
+    "dev": "node ../scripts/build-web.cjs && wrangler dev --port 8787",
+    "deploy": "node ../scripts/build-web.cjs && wrangler deploy"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "allowScripts": {
+    "workerd@1.20261118.1": true,
+    "esbuild@0.28.2": true,
+    "sharp@0.35.5": true
+  }
+}

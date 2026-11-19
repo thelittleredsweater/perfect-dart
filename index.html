@@ -17,9 +17,10 @@
 <div class="screen active" id="screenSetup">
   <div class="container">
     <div class="quick-nav">
-      <button class="btn btn-ghost btn-sm" onclick="openNetPanel()">🌐 En ligne</button>
-      <button class="btn btn-ghost btn-sm" onclick="showScreen('screenStats');renderStatsScreen()">📈 Statistiques</button>
-      <button class="btn btn-ghost btn-sm" onclick="openSettings()">⚙️ Réglages</button>
+      <button class="btn btn-ghost btn-sm" onclick="openNetPanel()"><span class="qn-i">🌐</span><span>En ligne</span></button>
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('screenStats');renderStatsScreen()"><span class="qn-i">📈</span><span>Statistiques</span></button>
+      <button class="btn btn-ghost btn-sm" onclick="openCast()"><span class="qn-i">📺</span><span>Caster</span></button>
+      <button class="btn btn-ghost btn-sm" onclick="openSettings()"><span class="qn-i">⚙️</span><span>Réglages</span></button>
     </div>
     <div class="setup-logo"><h1>Perfect Darts</h1><p>Le compteur qui te fait progresser</p></div>
     <div class="card" id="cardPlayers">
@@ -35,7 +36,7 @@
     </div>
     <div class="card">
       <div class="field"><label class="label">Mode de jeu</label>
-        <select id="cfgMode"><option value="301">301</option><option value="501" selected>501</option><option value="701">701</option><option value="901">901</option><option value="1001">1001</option><option value="cricket">Cricket</option><option value="around">Around the Clock</option><option value="bobs27">Bob's 27 — doubles</option><option value="catch40">Catch 40</option><option value="highscore">Highscore (10 volées)</option></select>
+        <select id="cfgMode"><option value="301">301</option><option value="501" selected>501</option><option value="701">701</option><option value="901">901</option><option value="1001">1001</option><option value="cricket">Cricket</option><option value="around">Around the Clock</option><option value="bobs27">Bob's 27 — doubles</option><option value="catch40">Catch 40</option><option value="highscore">Highscore (10 volées)</option><option value="shanghai">Shanghai</option><option value="killer">Killer</option><option value="co121">121 — entraînement checkout</option><option value="doubles">Doubles aléatoires</option></select>
       </div>
       <div class="field" id="fieldFinish"><label class="label">Règle de fin</label>
         <select id="cfgFinish"><option value="straight">Simple (score = 0)</option><option value="double" selected>Double obligatoire</option></select>
@@ -43,11 +44,23 @@
       <div class="field" id="fieldDoubleIn" style="display:none"><label class="label">Départ</label>
         <label style="display:flex;align-items:center;gap:10px;font-size:.9em;font-weight:700"><input type="checkbox" id="cfgDoubleIn" style="width:auto">Double obligatoire aussi à l'ouverture</label>
       </div>
+      <div class="field" id="fieldHandicap" style="display:none"><label class="label">Équilibrage</label>
+        <label style="display:flex;align-items:center;gap:10px;font-size:.9em;font-weight:700"><input type="checkbox" id="cfgHandicap" style="width:auto">Handicap automatique : départ selon le niveau de chacun</label>
+      </div>
+      <div class="field" id="fieldLegs" style="display:none"><label class="label">Format du match (BO = au meilleur de)</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <select id="cfgLegs" aria-label="Legs"><option value="1" selected>1 leg</option><option value="3">BO 3 legs</option><option value="5">BO 5 legs</option><option value="7">BO 7 legs</option><option value="9">BO 9 legs</option><option value="11">BO 11 legs</option></select>
+          <select id="cfgSets" aria-label="Sets"><option value="1" selected>Sans sets</option><option value="3">BO 3 sets</option><option value="5">BO 5 sets</option></select>
+        </div>
+      </div>
       <div class="field" id="fieldCutThroat" style="display:none"><label class="label">Variante</label>
         <label style="display:flex;align-items:center;gap:10px;font-size:.9em;font-weight:700"><input type="checkbox" id="cfgCutThroat" style="width:auto">Cut-throat : marquer pénalise les adversaires</label>
       </div>
       <div class="field" id="fieldAround" style="display:none"><label class="label">Type de cible</label>
         <select id="cfgAround"><option value="1" selected>Simples</option><option value="2">Doubles</option><option value="3">Triples</option></select>
+      </div>
+      <div class="field" id="fieldOpponent" style="display:none"><label class="label">Adversaire</label>
+        <select id="cfgOpponent"><option value="bot" selected>🤖 DartBot (niveau réglable)</option><option value="twin">🪞 Mon double (calibré sur ma moyenne)</option><option value="ghost">👻 Mon fantôme (ma meilleure partie X01)</option></select>
       </div>
       <div class="field" id="fieldBot" style="display:none"><label class="label">Moyenne du bot</label>
         <div style="display:flex;align-items:center;gap:12px">
@@ -64,20 +77,21 @@
     <div class="setup-actions">
       <button class="btn btn-primary" onclick="startGame()">🚀 Lancer la partie</button>
       <button class="btn btn-ghost btn-sm" onclick="resumeSavedGame()" id="resumeBtn">🔄 Reprendre</button>
+      <button class="btn btn-ghost btn-sm" onclick="openTournament()" id="tourneyBtn">🏆 Tournoi de soirée</button>
     </div>
   </div>
 </div>
 
 <div class="screen" id="screenGame">
   <div class="hud">
-    <div class="hud-top"><span class="hud-mode" id="hudMode">501 · DOUBLE OUT</span><span class="hud-turn" id="hudTurn">Tour</span></div>
+    <div class="hud-top"><span class="hud-mode" id="hudMode">501 · DOUBLE OUT</span><span class="tv-badge" id="tvBadge" style="display:none" onclick="openNetPanel()">📺 TV</span><button type="button" class="hud-cast" onclick="openCast()" aria-label="Afficher sur la TV" title="Afficher sur la TV">📺</button><span class="hud-turn" id="hudTurn">Tour</span></div>
     <div class="hud-scores" id="hudScores"></div>
   </div>
   <div class="game-body">
   <div class="game-left">
     <div class="darts-display"><div class="dart-slot" id="slot0">—</div><div class="dart-slot" id="slot1">—</div><div class="dart-slot" id="slot2">—</div></div>
     <div class="checkout" id="checkoutBox"><div class="co-label">💡 Checkout suggéré</div><div class="co-route" id="checkoutRoute"></div></div>
-    <div class="cricket-board hidden" id="cricketBoard"></div>
+    <div class="focus-bar" id="focusBar" aria-live="polite"></div>
     <div class="stats-bar">
       <div class="stat-item"><div class="st-val" id="statAvg">0</div><div class="st-lbl">Moy.</div></div>
       <div class="stat-item"><div class="st-val" id="statTurns">0</div><div class="st-lbl">Volées</div></div>
@@ -85,6 +99,10 @@
     </div>
   </div>
   <div class="game-right">
+    <div class="swipe-tabs" id="swipeTabs" role="tablist"><button type="button" class="sw-tab on" data-p="0" onclick="swipeTo(0)">🎯 Saisie</button><button type="button" class="sw-tab" data-p="1" onclick="swipeTo(1)">📋 Grille</button></div>
+    <div class="game-swipe" id="gameSwipe">
+    <div class="swipe-page" id="pageInput">
+    <div class="crk-mini" id="crkMini" onclick="swipeTo(1)" title="Voir la grille complète"></div>
     <div class="board-container">
     <div class="board-toggle">
       <button class="bt-btn selected" id="btnPad">⌨️ Pavé</button>
@@ -99,6 +117,9 @@
       <svg id="dartboard" viewBox="0 0 700 700" role="img" aria-label="Cible de fléchettes"></svg>
     </div>
   </div>
+    </div>
+    <div class="swipe-page" id="pageGrid"><div class="cricket-board hidden" id="cricketBoard"></div></div>
+    </div>
   <button class="btn btn-ghost btn-sm log-toggle-btn" id="logToggleBtn" onclick="toggleLog()">📜 Historique</button>
   <div class="log-panel hidden" id="logPanel"></div>
   </div>
@@ -126,6 +147,12 @@
       <div class="field"><label class="label">Type de voix</label>
         <select id="setGender"><option value="female">Féminine</option><option value="male">Masculine</option></select>
       </div>
+      <div class="field"><label class="label">Coach de checkout</label>
+        <select id="setCoach"><option value="1" selected>Activé — adapté à mes doubles</option><option value="">Désactivé — routes standard</option></select>
+      </div>
+      <div class="field"><label class="label">Annonces de l'arbitre</label>
+        <select id="setCaller"><option value="both">Fléchettes + score de la volée</option><option value="visit">Score de la volée seulement</option><option value="darts">Fléchette par fléchette seulement</option></select>
+      </div>
       <div class="field"><label class="label">Effets sonores</label>
         <select id="setSounds"><option value="1">Activés</option><option value="">Désactivés</option></select>
       </div>
@@ -140,6 +167,21 @@
       </div>
     </div>
     <div class="card">
+      <div class="field"><label class="label">Sauvegarde des statistiques</label>
+        <p class="bk-help">Tes stats sont stockées uniquement sur cet appareil : désinstaller l'appli les efface. Copie ta sauvegarde (envoie-la-toi par message ou mail) pour la retrouver plus tard ou sur un autre appareil.</p>
+        <div class="bk-actions">
+          <button class="btn btn-primary btn-sm" onclick="exportCareer()">📋 Copier ma sauvegarde</button>
+          <button class="btn btn-ghost btn-sm" onclick="downloadCareer()">💾 Fichier</button>
+        </div>
+        <textarea id="bkText" class="bk-text" rows="3" placeholder="Pour restaurer : colle ici ta sauvegarde…" spellcheck="false"></textarea>
+        <div class="bk-actions">
+          <button class="btn btn-ghost btn-sm" onclick="importCareerText()">📥 Restaurer depuis le texte</button>
+          <label class="btn btn-ghost btn-sm bk-file">📂 Depuis un fichier<input type="file" accept=".json,application/json,text/plain" onchange="importCareerFile(this)"></label>
+        </div>
+        <div class="bk-info" id="bkInfo"></div>
+      </div>
+    </div>
+    <div class="card">
       <div class="field"><label class="label">Maintenance</label>
         <button class="btn btn-ghost btn-sm" onclick="clearSavedGame()">🗑️ Effacer la partie sauvegardée</button>
         <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="clearSettings()">↩️ Réinitialiser les réglages</button>
@@ -148,17 +190,37 @@
   </div>
 </div>
 
+<div class="screen" id="screenTV">
+  <header class="tvh"><div class="tvh-l"><span class="tvh-logo">🎯</span><span id="tvMode"></span></div><div class="tvh-r" id="tvTurn"></div></header>
+  <main class="tvm"><div class="tv-players" id="tvPlayers"></div><div class="tv-crk" id="tvCrk"></div></main>
+  <footer class="tvf"><div class="tv-darts" id="tvDarts"></div><div class="tv-co" id="tvCo"></div><div class="tv-log" id="tvLog"></div></footer>
+  <div class="tv-flash" id="tvFlash"></div>
+  <div class="tv-win" id="tvWin"></div>
+  <div class="tv-wait" id="tvWait">Connexion…</div>
+  <div class="tv-tools"><button class="btn btn-primary" id="tvSound" onclick="tvEnableSound()">🔊 Activer le son de l'arbitre</button><button class="btn btn-ghost" onclick="tvFullscreen()">⛶ Plein écran</button></div>
+</div>
+
+<div class="screen" id="screenTournament">
+  <div class="container">
+    <div class="screen-head"><h2>🏆 Tournoi</h2><button class="back-btn" onclick="showScreen('screenSetup')">← Retour</button></div>
+    <div id="tnBody"></div>
+  </div>
+</div>
+
 <div class="screen" id="screenStats">
   <div class="container">
     <div class="screen-head"><h2>📈 Statistiques</h2><button class="back-btn" onclick="showScreen('screenSetup')">← Retour</button></div>
-    <div class="card card-scroll"><div class="chart-title">Joueurs (toutes parties)</div><div id="statsProfiles"></div></div>
-    <div class="card"><div class="chart-title">Dernières parties</div><div id="statsHistory"></div></div>
-    <button class="btn btn-danger btn-sm" onclick="resetCareer()">🗑️ Effacer toutes les statistiques</button>
+    <div class="sv-tabs" id="statsTabs" role="tablist"></div>
+    <div id="statsPlayer"></div>
+    <div id="statsRank"><div class="card card-scroll"><div class="chart-title">Classement (toutes parties)</div><div id="statsProfiles"></div></div>
+      <button class="btn btn-danger btn-sm" onclick="resetCareer()">🗑️ Effacer toutes les statistiques</button></div>
+    <div id="statsHist" style="display:none"><div class="card"><div class="chart-title">Dernières parties · touchez pour le détail</div><div id="statsHistory"></div></div></div>
   </div>
 </div>
 
 <div class="winner-overlay" id="winnerOverlay">
   <div class="winner-trophy">🏆</div><div class="winner-name" id="winnerName"></div><div class="winner-sub" id="winnerSub"></div>
+  <div class="winner-records" id="winnerRecords" style="display:none"></div>
   <div class="stats-grid" id="winnerStats"></div>
   <div class="chart-container"><div class="chart-title">📈 Évolution du score</div><canvas id="chartScore" width="400" height="180"></canvas></div>
   <div class="winner-buttons"><button class="btn btn-primary" onclick="backToSetup()">🔄 Rejouer</button><button class="btn btn-ghost" onclick="shareMatchStats()">📤 Partager les stats</button></div>
@@ -169,14 +231,27 @@
   <div class="net-card">
     <div class="screen-head"><h2>🌐 Partie en ligne</h2><button class="back-btn" onclick="closeNetPanel()">← Fermer</button></div>
     <div id="netHome">
+      <div class="sd-seg" id="netModeSeg" style="display:none"><button type="button" data-m="online" onclick="setNetMode('online')">🌐 Par Internet</button><button type="button" data-m="local" onclick="setNetMode('local')">🖥️ PC local</button></div>
       <div class="field" id="netServerField" style="display:none"><label class="label">Adresse du serveur (PC sur le même Wi-Fi)</label><input type="text" id="netServerAddr" placeholder="ex. 192.168.1.20:3210" inputmode="url" autocomplete="off"><span class="stepper-hint" style="text-align:left">Lance « npm run online » sur un PC du même réseau, puis saisis ici son adresse. Les autres joueurs scannent le QR ou rejoignent par code.</span></div>
       <div id="netStatus" class="empty-note" style="margin:8px 0"></div>
       <div class="btn-row"><button class="btn btn-primary" onclick="netHost()">📡 Créer une partie (hôte)</button></div>
+      <div class="btn-row" style="margin-top:10px"><button class="btn btn-ghost" onclick="tvHost()">📺 Grand écran (TV / tablette)</button></div>
       <div class="card" style="margin-top:14px">
         <div class="field"><label class="label">Votre pseudo</label><input type="text" id="netName" maxLength="12" placeholder="Joueur"></div>
         <div class="field"><label class="label">Code de la partie</label><input type="text" id="netCode" maxLength="6" placeholder="AB12CD" style="text-transform:uppercase"></div>
         <div id="netJoinErr" class="net-err"></div>
         <div class="btn-row"><button class="btn btn-primary" onclick="netJoin()">🔗 Rejoindre</button></div>
+      </div>
+    </div>
+    <div id="netTv" style="display:none">
+      <div class="card"><div class="chart-title">📺 Grand écran — code <span class="net-code" id="tvCode"></span></div>
+        <p class="empty-note" style="text-align:left;margin:8px 0">Sur la TV (navigateur, Android TV, Fire TV…), la tablette ou le PC, ouvrez cette adresse ou scannez le QR :</p>
+        <div class="net-code" id="tvUrl" style="font-size:.9em;word-break:break-all;text-align:center"></div>
+        <img id="tvQr" alt="QR code du grand écran" style="display:block;margin:12px auto 0;max-width:200px;border-radius:10px">
+        <div id="tvViewers" class="empty-note" style="margin-top:10px"></div>
+        <p class="empty-note" style="text-align:left;margin-top:8px">Ensuite, lancez votre partie normalement : elle s'affiche en grand sur l'écran, avec l'arbitre.</p>
+        <div class="btn-row"><button class="btn btn-primary" onclick="tvDone()">✅ Revenir au menu</button></div>
+        <div class="btn-row" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="tvStop()">⏹ Arrêter la diffusion</button></div>
       </div>
     </div>
     <div id="netLobby" style="display:none">
@@ -193,9 +268,14 @@
 <script src="js/net.js"></script>
 <script src="js/voice.js"></script>
 <script src="js/stats.js"></script>
+<script src="js/coach.js"></script>
 <script src="js/dartboard.js"></script>
 <script src="js/game.js"></script>
 <script src="js/bot2.js"></script>
+<script src="js/modes.js"></script>
+<script src="js/tournament.js"></script>
+<script src="js/tv.js"></script>
+<script src="js/cast.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/boot.js"></script>
 <script>

@@ -55,7 +55,7 @@ function loadGame(env) {
   ctx.Math.random = () => (ctx.__forceRandom !== undefined && ctx.__forceRandom !== null ? ctx.__forceRandom : Math.random());
   ctx.window = ctx;
   vm.createContext(ctx);
-  ['config.js', 'sounds.js', 'net.js', 'voice.js', 'stats.js', 'dartboard.js', 'game.js', 'bot2.js', 'ui.js'].forEach(f => {
+  ['config.js', 'sounds.js', 'net.js', 'voice.js', 'stats.js', 'coach.js', 'dartboard.js', 'game.js', 'bot2.js', 'modes.js', 'tournament.js', 'tv.js', 'ui.js'].forEach(f => {
     vm.runInContext(fs.readFileSync(path.join(JS_DIR, f), 'utf8'), ctx, { filename: f });
   });
   ['playEvent', 'announceCheckout', 'announceBust', 'recordGameToCareer', 'initVoice', 'pickVoice'].forEach(fn => {
@@ -472,6 +472,12 @@ async function testsStats() {
     const career = t.store.get('perfectdarts_career_v1');
     const prof = career && JSON.parse(career).profiles && JSON.parse(career).profiles['Greg'];
     check(!!prof && prof.games === 1, 'partie terminee enregistree', career ? career.slice(0, 120) : String(!!career));
+    { const cj = JSON.parse(career); const st = cj.history[0].players[0].st || {};
+      check(st.dt === 4 && st.sc === 220 && st.hiCo === 40 && st.bl === 4 && st.bk[0] === 1 && st.bk[4] === 1, 'v1.7 stats : detail de partie (darts, score, checkout, meilleur leg, repartition)', JSON.stringify(st));
+      check(!!(cj.hits && cj.hits.Greg && cj.hits.Greg[20][2] === 3 && cj.hits.Greg[20][1] === 1), 'v1.7 stats : impacts par segment pour la heatmap', JSON.stringify(cj.hits));
+      t.exec('renderStatsScreen()');
+      const dash = t.elFor('statsPlayer').innerHTML;
+      check(dash.indexOf('Moyenne 3 fl.') >= 0 && dash.indexOf('Records') >= 0 && dash.indexOf('Heatmap') >= 0, 'v1.7 stats : tableau de bord joueur (KPI, records, heatmap)'); }
     let ok = true;
     try { t.exec('renderStatsScreen()'); t.exec('resetCareer()'); } catch (e) { ok = false; console.log('   err=' + e.message); }
     check(ok, 'ecran stats + remise a zero sans crash');
@@ -523,9 +529,9 @@ async function testsNetOffline() {
   { // adresse serveur (APK) : netUrl et connect
     const t = loadGame(createEnv());
     t.exec('localStorage.setItem(SERVER_KEY,"192.168.1.9:3210")');
-    check(t.exec('netUrl()') === 'ws://192.168.1.9:3210', 'netUrl : adresse sauvegardee utilisee', String(t.exec('netUrl()')));
+    check(t.exec('netUrl()') === 'ws://192.168.1.9:3210/ws', 'netUrl : adresse sauvegardee utilisee', String(t.exec('netUrl()')));
     t.exec('document.getElementById("netServerAddr").value="10.0.0.5:3210"');
-    check(t.exec('netUrl()') === 'ws://10.0.0.5:3210', 'netUrl : champ manuel prioritaire', String(t.exec('netUrl()')));
+    check(t.exec('netUrl()') === 'ws://10.0.0.5:3210/ws', 'netUrl : champ manuel prioritaire', String(t.exec('netUrl()')));
     let okPanel = true;
     try { t.exec('openNetPanel()'); t.exec('netConnect(function(){},function(){},function(){})'); } catch (e) { okPanel = false; }
     check(okPanel, 'panneau en ligne : affichage + connexion sans crash');
@@ -574,7 +580,7 @@ async function testsVoiceRemote() {
     check(fetched.length === 1 && /translate_tts/.test(fetched[0]) && /tl=fr/.test(fetched[0]) && fetched[0].includes('Triple%20vingt'), 'TTS distant : URL Google TTS correcte (fr)', String(fetched[0] || fetched.length));
     check(played.length === 1, 'TTS distant : audio joue');
     t.exec('speak("Triple vingt")');
-    await t.sleep(25);
+    await t.sleep(400);
     check(fetched.length === 1 && played.length === 2, 'TTS distant : 2e annonce servie depuis le cache', JSON.stringify({ f: fetched.length, p: played.length }));
   }
   { // genre masculin / anglais
@@ -691,6 +697,218 @@ async function testsV152() {
     c.exec('undoLast()');
     check(c.exec('STATE.lives') === l0 && c.S().dartsThisTurn.length === 2, 'undo Catch 40 : vie restauree');
   }
+  { // audio : effets et dictee embarquee, fichiers presents
+    const t = loadGame(createEnv());
+    check(t.exec('soundPath("win")') === 'sounds/flawless-victory_C_major.wav', 'son de victoire');
+    t.exec('voiceLang="en"');
+    check(t.exec('dartAudioFile({baseValue:20,value:60,label:"T20",mult:3})') === 'sounds/voice/en/f/t20.mp3', 'dictee EN embarquee (voix feminine)');
+    t.exec('SETTINGS.voiceGender="male"');
+    check(t.exec('dartAudioFile({baseValue:20,value:40,label:"D20",mult:2})') === 'sounds/voice/en/m/d20.mp3', 'dictee EN voix masculine');
+    t.exec('SETTINGS.voiceGender="female"');
+    const root = path.join(__dirname, '..');
+    const missing = [];
+    for (const L of ['fr/f', 'fr/m', 'en/f', 'en/m']) {
+      for (let n = 1; n <= 20; n++) for (const p of ['n', 'd', 't']) if (!fs.existsSync(path.join(root, 'sounds/voice', L, p + n + '.mp3'))) missing.push(L + '/' + p + n);
+      for (const k of ['manque', 'bull', 'double-bull', 'jeu', 'rien']) if (!fs.existsSync(path.join(root, 'sounds/voice', L, k + '.mp3'))) missing.push(L + '/' + k);
+    }
+    check(missing.length === 0, 'tous les fichiers audio sont presents', missing.join(','));
+  }
+  { // v1.6 : score restant et marques cricket en direct
+    const t = setupGame({});
+    t.exec('throwDart(20,3)');
+    const card = t.elFor('hudScores').children[0];
+    check(card && /441/.test(card.innerHTML) && t.S().players[0].score === 501, 'HUD : restant en direct pendant la volee (441), score reel inchange');
+    const c = setupGame({ mode: 'cricket' });
+    c.exec('throwDart(20,3)');
+    check(/closed/.test(c.elFor('cricketBoard').innerHTML), 'cricket : marques affichees des la flechette');
+  }
+  { // v1.7 : cible a viser (focus) dans chaque mode
+    const J = (t, e) => JSON.stringify(t.exec(e));
+    const b = setupGame({ mode: 'bobs27', players: ['Greg'] });
+    check(J(b, 'modeFocus().aim') === '[{"b":1,"m":2}]' && J(b, 'modeFocus().live') === '[1]' && b.exec('modeFocus().big') === 'D1', "focus Bob's 27 : D1, seul le 1 est utile");
+    const a = setupGame({ mode: 'around', players: ['Greg', 'Léo'] });
+    a.exec('throwDart(1,1)');
+    check(J(a, 'modeFocus().aim') === '[{"b":2,"m":0}]' && a.exec('modeFocus().big') === '2', 'focus Around : la cible avance pendant la volee (1 -> 2)');
+    const k = setupGame({ mode: 'killer', players: ['A', 'B', 'C'] });
+    const nums = k.exec('STATE.players.map(p=>p.kNum)');
+    check(J(k, 'modeFocus().aim') === JSON.stringify([{ b: nums[0], m: 2 }]), 'focus Killer : non-killer vise son propre double');
+    k.exec('STATE.players[0].isKiller=true;STATE.players[2].lives=0');
+    check(J(k, 'modeFocus().aim') === JSON.stringify([{ b: nums[1], m: 2 }]), 'focus Killer : killer vise les doubles des adversaires encore en vie');
+    const s = setupGame({ mode: 'shanghai', players: ['A', 'B'] });
+    s.exec('throwDart(1,3)');
+    check(J(s, 'modeFocus().aim.map(x=>x.m)') === '[2,1]', 'focus Shanghai : le triple touche, restent double et simple');
+    const x = setupGame({});
+    x.exec('STATE.players[0].score=81;renderAll()');
+    check(J(x, 'modeFocus().aim') === '[{"b":19,"m":3}]', 'focus X01 : premiere flechette du checkout (T19 pour 81)');
+    check(J(x, 'tokAim("DBull")') === '{"b":25,"m":2}' && J(x, 'tokAim("Bull")') === '{"b":25,"m":1}' && J(x, 'tokAim("D16")') === '{"b":16,"m":2}', 'tokAim : Bull / DBull / doubles');
+    const c = setupGame({ mode: 'catch40', players: ['Greg'] });
+    c.exec('throwDart(20,1)');
+    check(c.exec('modeFocus().big') === 'Encore 20', 'focus Catch 40 : points manquants pour atteindre 40');
+    const cr = setupGame({ mode: 'cricket' });
+    check(cr.exec('modeFocus()') === null, 'focus : le Cricket garde ses propres aides');
+    cr.exec('throwDart(20,3)');
+    check(cr.exec('crkInfo().state(20)') === 'pts' && cr.exec('crkInfo().livePts') === 0, 'cricket : 20 ferme, adversaire ouvert -> points');
+    cr.exec('throwDart(20,2)');
+    check(cr.exec('crkInfo().livePts') === 40, 'cricket : points de la volee en direct (+40)');
+  }
+  { // arbitre : score de volee, restant, reglage
+    const played = [];
+    const env = createEnv();
+    env.Audio = class { constructor(src) { this.src = src; } play() { played.push(this.src); setTimeout(() => this.onended && this.onended(), 2); return Promise.resolve(); } pause() {} };
+    const t = loadGame(env);
+    t.exec('voiceLang="fr";SETTINGS.caller="visit"');
+    t.exec('announceDart({baseValue:20,value:60,label:"T20",mult:3})');
+    t.exec('announceVisitScore(140)');
+    await t.sleep(40);
+    check(played.length === 1 && played[0] === 'sounds/caller/fr/f/140.mp3', 'arbitre (volee seule) : annonce 140 sans dictee', JSON.stringify(played));
+    t.exec('announceRemaining(32)');
+    await t.sleep(600);
+    check(played.slice(1).join() === 'sounds/caller/fr/f/reste.mp3,sounds/caller/fr/f/32.mp3', 'arbitre : « Il vous reste » puis 32 dans l’ordre', JSON.stringify(played));
+    t.exec('SETTINGS.caller="darts";announceVisitScore(100)');
+    await t.sleep(20);
+    check(played.length === 3, 'reglage flechettes seules : pas de score annonce');
+    const root = path.join(__dirname, '..'), miss = [];
+    for (const L of ['fr/f', 'fr/m', 'en/f', 'en/m']) { for (let n = 1; n <= 180; n++) if (!fs.existsSync(path.join(root, 'sounds/caller', L, n + '.mp3'))) miss.push(L + n); if (!fs.existsSync(path.join(root, 'sounds/caller', L, 'reste.mp3'))) miss.push(L + 'reste'); }
+    check(miss.length === 0, 'arbitre : 724 fichiers presents (4 voix)', miss.slice(0, 5).join(','));
+  }
+  { // legs / sets
+    const t = loadGame(createEnv({ cfgMode: '501', cfgFinish: 'double', cfgLegs: '3', cfgSets: '1' }));
+    t.exec('PLAYER_COUNT=2;startGame()');
+    const winLegBy = async i => { t.exec('STATE.currentPlayer=' + i + ';STATE.dartsThisTurn=[];STATE.players[' + i + '].score=40;throwDart(20,2)'); await t.sleep(600); };
+    await winLegBy(0);
+    check(t.S().players[0].legs === 1 && !t.S().gameOver && t.S().players.every(p => p.score === 501), 'BO3 : leg 1 gagne, scores remis a 501');
+    check(t.S().currentPlayer === 1 && t.S().legStarter === 1, 'BO3 : l’autre joueur commence le leg 2');
+    await winLegBy(1);
+    check(t.S().players[1].legs === 1 && t.S().legStarter === 0 && !t.S().gameOver, 'BO3 : 1-1, alternance du lanceur');
+    await winLegBy(0);
+    check(t.S().gameOver && t.S().players[0].legs === 2, 'BO3 : 2-1, match termine');
+    const u = loadGame(createEnv({ cfgMode: '501', cfgFinish: 'double', cfgLegs: '3', cfgSets: '1' }));
+    u.exec('PLAYER_COUNT=2;startGame();STATE.players[0].score=40;throwDart(20,2)');
+    await u.sleep(600);
+    u.exec('undoLast()');
+    check(u.S().players[0].legs === 0 && u.S().players[0].score === 40 && u.S().currentPlayer === 0 && u.S().legStarter === 0, 'undo annule le leg gagne');
+    const s = loadGame(createEnv({ cfgMode: '501', cfgFinish: 'double', cfgLegs: '3', cfgSets: '3' }));
+    s.exec('PLAYER_COUNT=2;startGame()');
+    const win = async i => { s.exec('STATE.currentPlayer=' + i + ';STATE.dartsThisTurn=[];STATE.players[' + i + '].score=40;throwDart(20,2)'); await s.sleep(600); };
+    await win(0); await win(0);
+    check(s.S().players[0].sets === 1 && s.S().players.every(p => p.legs === 0) && s.S().legStarter === 1, 'sets : set 1 gagne (2 legs), legs remis a 0, l’autre commence');
+    await win(0); await win(0);
+    check(s.S().gameOver && s.S().players[0].sets === 2, 'sets : 2 sets = match gagne');
+    const one = setupGame({});
+    check(!one.exec('isMatchFormat()'), 'partie simple : pas de format de match par defaut');
+  }
+  { // coach de checkout personnalise
+    const t = setupGame({});
+    t.exec('STATE.players[0].dbl={20:[3,0]}');
+    check(t.exec('coachRoute(40,3,"Greg")') === null, 'coach : pas assez de donnees -> route standard');
+    t.exec('STATE.players[0].dbl={20:[40,2],8:[40,30]};coachVersion++');
+    const c = t.exec('coachRoute(40,3,"Greg")');
+    check(c && c.seg === 8 && c.pct >= 60 && !c.standard, 'coach : D20 faible / D8 fort -> route finie sur D8', JSON.stringify(c));
+    const v = c.route.split(' ').map(k => k === 'DBull' ? 50 : k === 'Bull' ? 25 : k[0] === 'T' ? 3 * k.slice(1) : k[0] === 'D' ? 2 * k.slice(1) : +k).reduce((a, b) => a + b);
+    check(v === 40, 'coach : la route fait bien 40', c.route);
+    t.exec('STATE.players[0].score=40;renderCheckout()');
+    check(t.elFor('checkoutRoute').textContent === c.route, 'coach : route affichee dans l’encadre de checkout');
+    t.exec('SETTINGS.coach=false;renderCheckout()');
+    check(t.elFor('checkoutRoute').textContent === 'D20', 'coach desactive : route standard');
+    t.exec('SETTINGS.coach=true;saveDoubleStats()');
+    check(t.exec('loadCareer().dbl.Greg[8][1]') === 30, 'coach : doubles sauvegardes en carriere');
+  }
+  { // adversaire a ton image : double et fantome
+    const env = createEnv({ cfgMode: '501', cfgFinish: 'double', cfgOpponent: 'twin', playerName1: 'Greg' });
+    const t = loadGame(env);
+    t.exec('localStorage.setItem(CAREER_KEY,JSON.stringify({profiles:{Greg:{games:3,wins:1,scored:2700,darts:90,bestTurn:100}},history:[]}))');
+    t.exec('PLAYER_COUNT=1;startGame()');
+    check(t.S().players[1].isBot && /double/.test(t.S().players[1].name) && t.S().botAvg === 90, 'Mon double : bot calibre sur ma moyenne (90)', t.S().players[1].name + ' ' + t.S().botAvg);
+    // record : Greg gagne en 2 volees (T20 x3 = 180, puis il reste 321 -> on force un finish)
+    const g = loadGame(createEnv({ cfgMode: '301', cfgFinish: 'double', playerName1: 'Greg', playerName2: 'Leo' }));
+    g.exec('PLAYER_COUNT=2;startGame()');
+    g.exec('throwDart(20,3);throwDart(20,3);throwDart(20,3)'); await g.sleep(560);
+    g.exec('throwDart(0,1);throwDart(0,1);throwDart(0,1)'); await g.sleep(560);
+    g.exec('throwDart(20,3);throwDart(11,1);throwDart(25,2)'); await g.sleep(600);
+    check(g.S().gameOver && g.exec('ghostOf("Greg","301-do").darts') === 6, 'fantome : record enregistre (6 flechettes)');
+    g.exec('document.getElementById("cfgOpponent").value="ghost";PLAYER_COUNT=1;document.getElementById("playerName1").value="Greg";startGame()');
+    check(g.S().players[1].ghost && g.S().players[1].ghostVisits.length === 2, 'fantome : adversaire cree depuis le record');
+    g.exec('STATE.currentPlayer=1;STATE.dartsThisTurn=[]');
+    const d1 = g.exec('ghostDart(STATE.players[1])');
+    check(d1.label === 'T20', 'fantome : rejoue la premiere flechette du record', JSON.stringify(d1));
+  }
+  { // handicap automatique
+    const t = loadGame(createEnv({ cfgMode: '501', cfgFinish: 'double', playerName1: 'Greg', playerName2: 'Leo' }));
+    t.exec('localStorage.setItem(CAREER_KEY,JSON.stringify({profiles:{Greg:{games:2,darts:60,scored:1800},Leo:{games:2,darts:60,scored:900}},history:[]}))');
+    t.exec('document.getElementById("cfgHandicap").checked=true;PLAYER_COUNT=2;startGame()');
+    check(t.S().handicap && t.S().players[0].score === 501 && t.S().players[1].score === 251, 'handicap : Greg (90) 501, Leo (45) 251', t.S().players.map(p => p.score).join('/'));
+  }
+  { // tournoi : poule puis elimination
+    const t = loadGame(createEnv({ cfgMode: '301', cfgFinish: 'double', cfgLegs: '1', cfgSets: '1' }));
+    const lg = t.exec('createTourney(["A","B","C","D"],"league",cfgSnapshot())');
+    check(lg.matches.length === 6, 'poule 4 joueurs : 6 matchs');
+    t.exec('saveTourney(createTourney(["A","B","C","D"],"league",cfgSnapshot()))');
+    let guard = 0;
+    while (t.exec('!!nextMatch(loadTourney())') && guard++ < 10) {
+      t.exec('playTourneyMatch()');
+      const winA = t.exec('STATE.players[0].name') === 'A' || t.exec('STATE.players[1].name') !== 'A';
+      t.exec('STATE.currentPlayer=0;STATE.dartsThisTurn=[];STATE.players[0].score=40;throwDart(20,2)');
+      await t.sleep(560);
+    }
+    const tl = t.exec('loadTourney()');
+    check(tl.matches.every(m => m.winner) && tl.champion, 'poule : tous les matchs joues, champion designe (' + tl.champion + ')');
+    check(t.exec('standings(loadTourney())[0].pts') >= 4, 'poule : classement calcule');
+    t.exec('backToSetup()');
+    const ko = t.exec('createTourney(["A","B","C","D","E"],"ko",cfgSnapshot())');
+    check(ko.matches.filter(m => m.round === 1).length === 4 && ko.matches.filter(m => m.bye).length === 3, 'elimination 5 joueurs : 3 exempts au 1er tour');
+    t.exec('saveTourney(createTourney(["A","B","C","D","E"],"ko",cfgSnapshot()))');
+    let played = 0; guard = 0;
+    while (t.exec('!!nextMatch(loadTourney())') && guard++ < 10) {
+      t.exec('playTourneyMatch();STATE.currentPlayer=1;STATE.dartsThisTurn=[];STATE.players[1].score=40;throwDart(20,2)');
+      await t.sleep(560); played++;
+    }
+    check(played === 4 && t.exec('loadTourney().champion'), 'elimination : 4 matchs joues puis champion', 'joues=' + played);
+  }
+  { // nouveaux modes : Shanghai
+    const t = setupGame({ mode: 'shanghai' });
+    t.exec('throwDart(1,1);throwDart(1,2);throwDart(1,3)'); await t.sleep(600);
+    check(t.S().gameOver && t.S().players[0].score === 6, 'Shanghai : simple+double+triple du 1 = victoire immediate');
+    const u = setupGame({ mode: 'shanghai' });
+    for (let r = 1; r <= 7; r++) for (let i = 0; i < 2; i++) { u.exec('STATE.dartsThisTurn=[];throwDart(' + r + ',' + (i === 0 ? 3 : 1) + ');throwDart(0,1);throwDart(0,1)'); await u.sleep(560); }
+    check(u.S().gameOver && u.S().players[0].score === 84 && u.S().players[1].score === 28, 'Shanghai : 7 manches, le plus gros total gagne (84 contre 28)', u.S().players.map(p => p.score).join('/'));
+  }
+  { // Killer
+    const t = setupGame({ mode: 'killer' });
+    check(t.S().players.every(p => p.lives === 3 && p.kNum >= 1 && p.kNum <= 20) && t.S().players[0].kNum !== t.S().players[1].kNum, 'Killer : numeros differents et 3 vies');
+    t.exec('STATE.players[0].kNum=20;STATE.players[1].kNum=5');
+    const visit = async (a, b, c) => { t.exec('STATE.dartsThisTurn=[];throwDart(' + a + ');throwDart(' + b + ');throwDart(' + c + ')'); await t.sleep(560); };
+    await visit('5,2', '20,2', '5,2'); // 1er D5 sans effet, D20 = killer, 2e D5 retire une vie
+    check(t.S().players[0].isKiller && t.S().players[1].lives === 2, 'Killer : double de son numero = killer, puis double adverse = -1 vie', 'lives=' + t.S().players[1].lives);
+    await visit('0,1', '0,1', '0,1');
+    await visit('5,2', '5,2', '0,1');
+    check(t.S().gameOver && t.S().players[1].lives === 0, 'Killer : dernier en vie gagne');
+    t.exec('BOT2_SIGMA_OVERRIDE=0.01');
+    const k = setupGame({ mode: 'killer', players: ['Greg'] });
+    k.exec('b2Dart=function(tok){return {tok:tok}};STATE.currentPlayer=1;STATE.players[1].kNum=7;STATE.players[1].isKiller=false;STATE.players[0].kNum=12');
+    check(k.exec('botKillerDart(100).tok') === 'D7', 'Killer : le bot vise le double de son numero');
+    k.exec('STATE.players[1].isKiller=true');
+    check(k.exec('botKillerDart(100).tok') === 'D12', 'Killer : devenu killer, le bot vise le double adverse');
+  }
+  { // 121
+    const t = loadGame(createEnv({ cfgMode: 'co121' }));
+    t.exec('PLAYER_COUNT=1;startGame()');
+    check(t.S().players.length === 1 && t.S().players[0].score === 121, '121 : solo, depart a 121');
+    t.exec('throwDart(20,3);throwDart(11,1);throwDart(25,2)'); await t.sleep(600);
+    check(t.S().ms.target === 122 && t.S().players[0].score === 122 && t.S().ms.success === 1, '121 : finish reussi, cible 122');
+    t.exec('undoLast()');
+    check(t.S().ms.target === 121 && t.S().ms.success === 0 && t.S().dartsThisTurn.length === 2, 'undo 121 : etat du mode restaure');
+    t.exec('STATE.dartsThisTurn=[];STATE.players[0].score=122;STATE.ms={target:122,visit:0,attempt:2,best:121,success:1}');
+    for (let i = 0; i < 3; i++) { t.exec('STATE.dartsThisTurn=[];throwDart(0,1);throwDart(0,1);throwDart(0,1)'); await t.sleep(560); }
+    check(t.S().ms.target === 122 && t.S().ms.attempt === 3 && t.S().players[0].score === 122, '121 : 3 volees ratees = essai perdu, meme cible');
+  }
+  { // Doubles aleatoires
+    const t = loadGame(createEnv({ cfgMode: 'doubles' }));
+    t.exec('PLAYER_COUNT=1;startGame()');
+    const tg = t.exec('STATE.ms.targets[0]');
+    check(t.exec('STATE.ms.targets.length') === 20, 'Doubles : 20 cibles tirees');
+    t.exec('throwDart(' + tg + ',2);throwDart(' + tg + ',2);throwDart(' + (tg === 20 ? 1 : 20) + ',2)'); await t.sleep(600);
+    check(t.S().players[0].score === 2 && t.S().ms.idx === 1, 'Doubles : seul le double annonce compte (2 touches)');
+  }
   { // 7. bouton retour Android
     const t = setupGame({});
     let confirms = 0;
@@ -704,14 +922,19 @@ async function testsV152() {
     t.exec('showScreen("screenSettings")');
     check(t.exec('handleBack()') === 'menu' && t.exec('currentScreen') === 'screenSetup', 'retour depuis Reglages -> menu');
     check(t.exec('backAction()') === 'exit', 'retour au menu : 2e appui pour quitter');
-    // installation popstate : chaque retour remet une garde dans l'historique
+    // garde : jamais posee hors geste utilisateur (Chromium la sauterait), une seule a la fois
     const pushes = []; let pop = null;
     t.ctx.history = { replaceState() {}, pushState(s) { pushes.push(s); } };
     t.ctx.addEventListener = (ty, f) => { if (ty === 'popstate') pop = f; };
     t.exec('initBackButton()');
+    check(pushes.length === 0, 'garde retour : rien pose au demarrage (sans geste)');
+    t.exec('armBackGuard();armBackGuard()');
+    check(pushes.length === 1, 'garde retour : posee au 1er geste, une seule fois');
     t.exec('showScreen("screenStats")');
     pop();
-    check(pushes.length === 2 && t.exec('currentScreen') === 'screenSetup', 'popstate : ecran precedent + garde remise', 'pushes=' + pushes.length);
+    check(t.exec('currentScreen') === 'screenSetup' && pushes.length === 1, 'popstate : ecran precedent, garde consommee');
+    t.exec('armBackGuard()');
+    check(pushes.length === 2, 'garde retour : reposee au geste suivant');
   }
 }
 
@@ -960,6 +1183,28 @@ async function testsSummary() {
     t.exec('endGame(STATE.players[0])');
     check(t.S().players[0].mpr === 3, 'MPR : 3 marques / 1 tour = 3.0', String(t.S().players[0].mpr));
     check(t.exec('matchSummary(STATE.players[0]).mpr') === 3, 'matchSummary : MPR reporté');
+  }
+  { // v1.7 : nouveaux records, entrainements, sauvegarde
+    const t = setupGame({ mode: '501', players: ['Greg'] });
+    t.exec('STATE.players[0].score=40');
+    await throwVisit(t, [[20, 2]]);
+    t.exec('PLAYER_COUNT=1;startGame()');
+    t.exec('STATE.players[0].score=100');
+    await throwVisit(t, [[20, 3], [20, 2]]);
+    const recs = t.exec('JSON.stringify(STATE.lastRecords)');
+    check(/Plus haut checkout/.test(recs) && /100/.test(recs) && /Meilleur leg/.test(recs) === false, 'v1.7 records : nouveau plus haut checkout detecte (100 > 40)', recs);
+    check(/Nouveaux? records?/.test(t.elFor('winnerRecords').innerHTML), 'v1.7 records : affiches sur l ecran de victoire');
+    t.exec('STATE.mode="bobs27";STATE.gameOver=false;STATE.players[0].score=150;endPractice(STATE.players[0],true,"x")');
+    t.exec('STATE.gameOver=false;STATE.players[0].score=210;endPractice(STATE.players[0],true,"x")');
+    check(t.exec('loadCareer().training.Greg.bobs27.length') === 2 && t.exec('loadCareer().training.Greg.bobs27[0].v') === 210, 'v1.7 entrainement : Bobs 27 enregistre');
+    check(/Record Bob/.test(t.exec('JSON.stringify(STATE.lastRecords)')), 'v1.7 entrainement : record de seance detecte');
+    t.exec('renderStatsScreen()');
+    check(t.elFor('statsPlayer').innerHTML.indexOf('Entraînements') >= 0, 'v1.7 entrainement : carte dans le tableau de bord');
+    const bk = t.exec('careerBackupText()');
+    t.exec('localStorage.removeItem(CAREER_KEY)');
+    const parsed = t.exec('JSON.stringify(parseCareerBackup(' + JSON.stringify(bk) + ').profiles.Greg.games)');
+    check(parsed === '2', 'v1.7 sauvegarde : export puis relecture', parsed);
+    check(t.exec('parseCareerBackup("pas du json")') === null && t.exec('parseCareerBackup("{\\"a\\":1}")') === null, 'v1.7 sauvegarde : texte invalide refuse');
   }
   { // Carriere : F9 et MPR persistes et affiches
     const t = loadGame(createEnv({ cfgMode: 'cricket', playerName1: 'Greg', playerName2: 'Léo' }));

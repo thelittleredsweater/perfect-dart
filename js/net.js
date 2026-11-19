@@ -5,7 +5,7 @@
    `location.host` n'y est donc JAMAIS vide mais ne pointe PAS vers le serveur de parties :
    il faut toujours passer par l'adresse saisie/mémorisée (ex. 192.168.1.20:3210).
    Nécessite : node server.cjs puis ouvrir http://IP-du-PC:3210/ sur tous les appareils. */
-var NET={mode:null,ws:null,code:'',seat:0,roster:[],started:false,overlayCb:null};
+var NET={mode:null,ws:null,code:'',seat:0,roster:[],started:false,overlayCb:null,tv:false};
 const SERVER_KEY='perfectdarts_server_v1';
 const APPASSETS_HOST='appassets.androidplatform.net';
 /* Page HTTPS (APK appassets) : Chromium refuse de construire un ws:// depuis un
@@ -18,17 +18,28 @@ function netRedirectToHttp(action,code,name){
   let s='';try{const el=document.getElementById('netServerAddr');s=(el&&el.value?el.value:'')||localStorage.getItem(SERVER_KEY)||''}catch(e){s=netServerSaved()}
   const addr=String(s).trim().replace(/^wss?:\/\//i,'').replace(/\/+$/,'');
   if(!addr){netFail('Renseigne l\u2019adresse du serveur (ex. 192.168.1.20:3210)');return}
-  const q=action==='join'?('?join='+encodeURIComponent(code||'')+(name?'&name='+encodeURIComponent(name):'')):'?create=1';
+  const q=action==='tv'?'?tvhost=1':action==='join'?('?join='+encodeURIComponent(code||'')+(name?'&name='+encodeURIComponent(name):'')):'?create=1';
   netStatusMsg('Ouverture de '+addr+'…');
   location.href='http://'+addr+'/'+q;
 }
 function netIsLocalApp(){return location.host===APPASSETS_HOST||location.protocol==='file:'}
 function netServerSaved(){try{return localStorage.getItem(SERVER_KEY)||''}catch(e){return''}}
-function netUrl(){
-  if(!netIsLocalApp()&&location.host)return(location.protocol==='https:'?'wss://':'ws://')+location.host;
+/* Relais en ligne (Cloudflare) : adresse fixée dans config.js (ONLINE_SERVER),
+   surchargeable pour les tests via localStorage 'perfectdarts_online_v1'. */
+const NETMODE_KEY='perfectdarts_netmode_v1';
+function onlineServer(){let o='';try{o=localStorage.getItem('perfectdarts_online_v1')||''}catch(e){}o=o||(typeof ONLINE_SERVER==='string'?ONLINE_SERVER:'');return String(o).trim().replace(/\/+$/,'')}
+/* 'online' (Internet, par défaut quand le relais existe) ou 'local' (PC du même Wi-Fi). */
+function netMode(){let m='';try{m=localStorage.getItem(NETMODE_KEY)||''}catch(e){}return m==='local'||!onlineServer()?'local':'online'}
+function setNetMode(m){try{localStorage.setItem(NETMODE_KEY,m)}catch(e){}netModeUi()}
+function netModeUi(){const on=netMode()==='online',has=!!onlineServer();const seg=document.getElementById('netModeSeg');if(seg){seg.style.display=has&&netIsLocalApp()?'':'none';seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.m===(on?'online':'local')))}const sf=document.getElementById('netServerField');if(sf)sf.style.display=(netIsLocalApp()||!location.host)&&!on?'':'none'}
+/* URL WebSocket : chemin /ws (+ ?code= pour rejoindre / regarder un salon). */
+function netUrl(code){
+  const q='/ws'+(code?'?code='+encodeURIComponent(code):'');
+  if(!netIsLocalApp()&&location.host)return(location.protocol==='https:'?'wss://':'ws://')+location.host+q;
+  if(netMode()==='online'){const o=onlineServer();if(o)return o.replace(/^https:/i,'wss:').replace(/^http:/i,'ws:').replace(/^(?!wss?:)/i,'wss://')+q}
   let s='';try{const el=document.getElementById('netServerAddr');s=(el&&el.value?el.value:'')||localStorage.getItem(SERVER_KEY)||''}catch(e){s=netServerSaved()}
   const a=String(s).trim().replace(/^wss?:\/\//i,'').replace(/\/+$/,'');
-  return a?'ws://'+a:'';
+  return a?'ws://'+a+q:'';
 }
 function saveServerAddr(){try{const el=document.getElementById('netServerAddr');if(el&&el.value.trim())localStorage.setItem(SERVER_KEY,el.value.trim().replace(/^wss?:\/\//i,'').replace(/\/+$/,''))}catch(e){}}
 function netPretty(url){return url.replace(/^wss?:\/\//i,'')}
@@ -36,24 +47,25 @@ function netStatusMsg(msg){const st=document.getElementById('netStatus');if(st)s
 function netFail(msg){netStatusMsg(msg);showToast(msg,'error')}
 /* Connexion WebSocket avec échecs TOUJOURS visibles : message d'état dans le
    panneau, toast précis au bout de 5 s sans ouverture, fermeture propre. */
-function netConnect(onOpen,onMsg,onClose){
-  const url=netUrl();
+function netConnect(onOpen,onMsg,onClose,code){
+  const url=netUrl(code);
   if(!url){netFail('Renseigne l\u2019adresse du serveur (ex. 192.168.1.20:3210)');return false}
   let opened=false,ws;
   try{ws=new WebSocket(url)}catch(e){netFail('Connexion impossible : '+e.message);return false}
   if(NET.ws){try{NET.ws.close()}catch(e){}}
   NET.ws=ws;
   netStatusMsg('Connexion à '+netPretty(url)+'…');
-  const timer=setTimeout(()=>{if(!opened){netFail('Serveur injoignable à '+netPretty(url)+' — vérifie « npm run online » sur le PC, l\u2019adresse et le pare-feu');try{ws.close()}catch(e){}}},5000);
-  ws.onopen=()=>{opened=true;clearTimeout(timer);netStatusMsg('Connecté au serveur');if(onOpen)onOpen()};
+  const timer=setTimeout(()=>{if(!opened){netFail(netMode()==='online'&&netIsLocalApp()?'Serveur en ligne injoignable — vérifie la connexion Internet':'Serveur injoignable à '+netPretty(url)+' — vérifie « npm run online » sur le PC, l\u2019adresse et le pare-feu');try{ws.close()}catch(e){}}},8000);
+  let ping=null;
+  ws.onopen=()=>{opened=true;clearTimeout(timer);netStatusMsg('Connecté au serveur');ping=setInterval(()=>{if(ws.readyState===1)try{ws.send('{"t":"ping"}')}catch(e){}},25000);if(onOpen)onOpen()};
   ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}if(onMsg)onMsg(m)};
   ws.onerror=()=>{if(!opened){clearTimeout(timer);netFail('Serveur injoignable à '+netPretty(url))}};
-  ws.onclose=()=>{clearTimeout(timer);if(!opened)netFail('Serveur injoignable à '+netPretty(url));else netStatusMsg('Déconnecté');if(onClose)onClose()};
+  ws.onclose=()=>{clearTimeout(timer);clearInterval(ping);if(!opened)netFail('Serveur injoignable à '+netPretty(url));else netStatusMsg('Déconnecté');if(onClose)onClose()};
   return true;
 }
 function netSend(o){if(NET.ws&&NET.ws.readyState===1){try{NET.ws.send(JSON.stringify(o))}catch(e){}}}
-function openNetPanel(){NET.roster=[];NET.mode=null;NET.started=false;const ov=document.getElementById('netOverlay');if(!ov)return;ov.classList.add('show');document.getElementById('netHome').style.display='';document.getElementById('netLobby').style.display='none';document.getElementById('netJoinErr').textContent='';const sf=document.getElementById('netServerField');if(sf)sf.style.display=(netIsLocalApp()||!location.host)?'':'none';const sa=document.getElementById('netServerAddr');if(sa&&!sa.value)sa.value=netServerSaved();netStatusMsg('')}
-function closeNetPanel(){const ov=document.getElementById('netOverlay');if(ov)ov.classList.remove('show');if(NET.ws){try{NET.ws.close()}catch(e){}}NET.ws=null;NET.mode=null}
+function openNetPanel(){if(NET.tv){const o=document.getElementById('netOverlay');if(o)o.classList.add('show');document.getElementById('netHome').style.display='none';document.getElementById('netLobby').style.display='none';document.getElementById('netTv').style.display='';return}NET.roster=[];NET.mode=null;NET.started=false;const ov=document.getElementById('netOverlay');if(!ov)return;ov.classList.add('show');document.getElementById('netHome').style.display='';document.getElementById('netLobby').style.display='none';document.getElementById('netJoinErr').textContent='';netModeUi();const sa=document.getElementById('netServerAddr');if(sa&&!sa.value)sa.value=netServerSaved();netStatusMsg('')}
+function closeNetPanel(){if(NET.tv){tvDone();return}const ov=document.getElementById('netOverlay');if(ov)ov.classList.remove('show');if(NET.ws){try{NET.ws.close()}catch(e){}}NET.ws=null;NET.mode=null}
 function netHidePanel(){const ov=document.getElementById('netOverlay');if(ov)ov.classList.remove('show');document.getElementById('netHome').style.display='none';document.getElementById('netLobby').style.display='none'}
 function netHost(){saveServerAddr();const u=netUrl();if(netNeedsHttpRedirect(u)){netRedirectToHttp('create');return}netConnect(()=>{netSend({t:'create'})},m=>{
   if(m.t==='created'){NET.mode='host';NET.code=m.code;document.getElementById('netHome').style.display='none';document.getElementById('netLobby').style.display='';document.getElementById('netRoomCode').textContent=m.code;
@@ -77,14 +89,14 @@ function netJoin(){saveServerAddr();const code=(document.getElementById('netCode
   if(m.t==='joined'){NET.mode='client';NET.seat=m.seat;document.getElementById('netHome').style.display='none';document.getElementById('netLobby').style.display='';document.getElementById('netRoomCode').textContent=code;document.getElementById('netQr').src='img/hero-dartboard.jpg';document.getElementById('netWait').textContent='En attente du lancement par l\u2019hôte…';document.getElementById('netPlayers').innerHTML='';document.getElementById('netLaunchBtn').style.display='none'}
   else if(m.t==='started'){NET.started=true;netHidePanel();showScreen('screenGame');if(!STATE.players.length){showToast('Synchronisation avec l\u2019hôte…','success')}NET.gate()}
   else if(m.t==='state'){NET.applyState(m.s)}
-  else if(m.t==='event'){playSound(m.kind==='big'?'big':m.kind);if(m.kind==='win'&&m.name)netShowWinner(m.name)}
+  else if(m.t==='event'){netEventSound(m);if(m.kind==='win'&&m.name)netShowWinner(m.name)}
   else if(m.t==='host-gone'){showToast('L\u2019hôte a quitté la partie','error');closeNetPanel();showScreen('screenSetup')}
   else if(m.t==='err'){document.getElementById('netJoinErr').textContent=m.msg||'Erreur';try{NET.ws.close()}catch(e){}}
-},()=>{if(NET.mode==='client'&&NET.started){showToast('Connexion perdue avec l\u2019hôte','error');closeNetPanel();showScreen('screenSetup')}})}
+},()=>{if(NET.mode==='client'&&NET.started){showToast('Connexion perdue avec l\u2019hôte','error');closeNetPanel();showScreen('screenSetup')}},code)}
 function netShowWinner(name){const el=document.getElementById('winnerName');if(el)el.textContent=name+' a gagné !';const ov=document.getElementById('winnerOverlay');if(ov)ov.classList.add('active');const st=document.getElementById('winnerStats');if(st)st.innerHTML='';if(typeof playSound==='function')playSound('win')}
-NET.onRender=function(){if(NET.mode==='host'&&NET.started)NET.syncState();else if(NET.mode==='client')NET.gate()};
-NET.syncState=function(){if(!NET.started)return;const st={mode:STATE.mode,finishDouble:STATE.finishDouble,currentPlayer:STATE.currentPlayer,dartsThisTurn:STATE.dartsThisTurn,turnCount:STATE.turnCount,gameOver:STATE.gameOver,cricketMarks:STATE.cricketMarks,aroundClock:STATE.aroundClock,log:(STATE.log||[]).slice(0,12),players:STATE.players.map(p=>({name:p.name,score:p.score,turns:p.turns,totalScored:p.totalScored,dartsThrown:p.dartsThrown,bestTurn:p.bestTurn,isBot:!!p.isBot}))};netSend({t:'state',s:st})};
-NET.applyState=function(s){if(!s)return;STATE.players=s.players||[];STATE.currentPlayer=s.currentPlayer;STATE.dartsThisTurn=s.dartsThisTurn||[];STATE.turnCount=s.turnCount;STATE.gameOver=s.gameOver;STATE.cricketMarks=s.cricketMarks||{};STATE.aroundClock=s.aroundClock||{};STATE.log=s.log||[];STATE.mode=s.mode;STATE.finishDouble=s.finishDouble;renderAll()};
+NET.onRender=function(){if(NET.mode==='host'&&(NET.started||NET.tv))NET.syncState();else if(NET.mode==='client')NET.gate()};
+NET.syncState=function(){if(!NET.started&&!NET.tv)return;const st={mode:STATE.mode,finishDouble:STATE.finishDouble,currentPlayer:STATE.currentPlayer,dartsThisTurn:STATE.dartsThisTurn,turnCount:STATE.turnCount,gameOver:STATE.gameOver,cricketMarks:STATE.cricketMarks,aroundClock:STATE.aroundClock,log:(STATE.log||[]).slice(0,12),legsBestOf:STATE.legsBestOf,setsBestOf:STATE.setsBestOf,legNumber:STATE.legNumber,bobsRound:STATE.bobsRound,ms:STATE.ms,lives:STATE.lives,aroundVariant:STATE.aroundVariant,cutThroat:!!STATE.cutThroat,doubleIn:!!STATE.doubleIn,tournament:STATE.tournamentMatch?tvTournamentInfo():null,players:STATE.players.map(p=>({name:p.name,score:p.score,legs:p.legs||0,sets:p.sets||0,kNum:p.kNum,lives:p.lives,isKiller:!!p.isKiller,turns:p.turns,totalScored:p.totalScored,dartsThrown:p.dartsThrown,bestTurn:p.bestTurn,isBot:!!p.isBot,started:p.started,last:(p.turnHistory||[]).length?p.turnHistory[p.turnHistory.length-1]:null,c180:p.count180||0,co:p.checkouts||0}))};netSend({t:'state',s:st})};
+NET.applyState=function(s){if(!s)return;STATE.bobsRound=s.bobsRound;STATE.ms=s.ms||{};STATE.lives=s.lives;STATE.aroundVariant=s.aroundVariant||1;STATE.cutThroat=!!s.cutThroat;STATE.doubleIn=!!s.doubleIn;STATE.tvTournament=s.tournament||null;STATE.players=s.players||[];STATE.currentPlayer=s.currentPlayer;STATE.dartsThisTurn=s.dartsThisTurn||[];STATE.turnCount=s.turnCount;STATE.gameOver=s.gameOver;STATE.cricketMarks=s.cricketMarks||{};STATE.aroundClock=s.aroundClock||{};STATE.log=s.log||[];STATE.mode=s.mode;STATE.finishDouble=s.finishDouble;STATE.legsBestOf=s.legsBestOf||1;STATE.setsBestOf=s.setsBestOf||1;STATE.legNumber=s.legNumber||1;renderAll()};
 NET.gate=function(){const my=(NET.mode==='client'&&NET.started)?STATE.currentPlayer===NET.seat&&!STATE.gameOver:(NET.mode==='host');['boardGrid','quickScores','padContainer','multiplier-bar','board-toggle'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('net-locked',NET.mode==='client'&&!my)});const mk=document.querySelector('.multiplier-bar');if(mk)mk.classList.toggle('net-locked',NET.mode==='client'&&!my)};
 NET.sendDart=function(v,mult){netSend({t:'dart',value:v,mult:(mult!=null?mult:STATE.currentMult)})};
 NET.sendQuick=function(v){netSend({t:'quick',value:v})};

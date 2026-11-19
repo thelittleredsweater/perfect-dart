@@ -42,7 +42,9 @@ const rooms = new Map(); // code -> {host: ws, players: [{ws, seat}], seats: n}
 const wss = new WebSocketServer({ server });
 
 function send(ws, obj) { if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(obj)); } catch (e) {} } }
-function roomOf(ws) { for (const [code, r] of rooms) { if (r.host === ws || (r.players || []).some(p => p.ws === ws)) return [code, r, r.host === ws ? 'host' : 'player']; } return [null, null, null]; }
+function roomOf(ws) { for (const [code, r] of rooms) { if (r.host === ws || (r.players || []).some(p => p.ws === ws)) return [code, r, r.host === ws ? 'host' : 'player']; if ((r.spectators || []).includes(ws)) return [code, r, 'spectator']; } return [null, null, null]; }
+/* Diffusion vers les joueurs ET les écrans spectateurs (grand écran TV). */
+function relay(room, data) { (room.players || []).forEach(p => { if (p.ws.readyState === 1) { try { p.ws.send(data); } catch (e) {} } }); (room.spectators || []).forEach(s => { if (s.readyState === 1) { try { s.send(data); } catch (e) {} } }); }
 
 wss.on('connection', ws => {
   ws.on('message', raw => {
@@ -51,7 +53,7 @@ wss.on('connection', ws => {
     switch (m.t) {
       case 'create': {
         let c; do { c = code6(); } while (rooms.has(c));
-        rooms.set(c, { host: ws, players: [], seats: 1 });
+        rooms.set(c, { host: ws, players: [], spectators: [], seats: 1, lastState: null });
         send(ws, { t: 'created', code: c, joinUrl: 'http://' + lanIP() + ':' + PORT + '/' });
         break;
       }
@@ -66,16 +68,26 @@ wss.on('connection', ws => {
         (r.players || []).forEach(p => send(p.ws, { t: 'player-joined', seat, name: String(m.name || '').slice(0, 12), count: r.players.length + 1 }));
         break;
       }
+      case 'watch': {
+        /* Écran spectateur : reçoit l'état et les annonces, ne joue pas. */
+        const c3 = String(m.code || '').toUpperCase(), r = rooms.get(c3);
+        if (!r || r.host.readyState !== 1) { send(ws, { t: 'err', msg: 'Partie introuvable ou terminee' }); return; }
+        if (!r.spectators.includes(ws)) r.spectators.push(ws);
+        send(ws, { t: 'watching', code: c3 });
+        if (r.lastState) send(ws, { t: 'state', s: r.lastState });
+        send(r.host, { t: 'spectator-joined', count: r.spectators.length });
+        break;
+      }
       case 'start': {
         if (role === 'host') { (room.players || []).forEach(p => send(p.ws, { t: 'started', seats: (room.players || []).length + 1 })); }
         break;
       }
       case 'state': {
-        if (role === 'host') { const data = JSON.stringify({ t: 'state', s: m.s }); room.players.forEach(p => { if (p.ws.readyState === 1) { try { p.ws.send(data); } catch (e) {} } }); }
+        if (role === 'host') { room.lastState = m.s; relay(room, JSON.stringify({ t: 'state', s: m.s })); }
         break;
       }
       case 'event': {
-        if (role === 'host') { const data = JSON.stringify(m); room.players.forEach(p => { if (p.ws.readyState === 1) { try { p.ws.send(data); } catch (e) {} } }); }
+        if (role === 'host') relay(room, JSON.stringify(m));
         break;
       }
       case 'quick': case 'dart': case 'undo': case 'pass': case 'skip': {
@@ -97,10 +109,12 @@ wss.on('connection', ws => {
   ws.on('close', () => {
     const [code, r, role] = roomOf(ws);
     if (!r) return;
+    if (role === 'spectator') { r.spectators = r.spectators.filter(s => s !== ws); send(r.host, { t: 'spectator-left', count: r.spectators.length }); return; }
     const gone = (r.players || []).find(p => p.ws === ws);
     r.players = (r.players || []).filter(p => p.ws !== ws);
     if (role === 'host') {
       r.players.forEach(p => send(p.ws, { t: 'host-gone' }));
+      (r.spectators || []).forEach(s => send(s, { t: 'host-gone' }));
       rooms.delete(code);
     } else {
       send(r.host, { t: 'player-left', seat: gone ? gone.seat : undefined, name: gone ? gone.name : '', count: r.players.length + 1 });

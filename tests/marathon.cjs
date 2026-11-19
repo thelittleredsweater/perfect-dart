@@ -68,7 +68,7 @@ function loadFast(env) {
   ctx.Math = Object.create(Math);
   ctx.window = ctx;
   vm.createContext(ctx);
-  ['config.js', 'sounds.js', 'net.js', 'voice.js', 'stats.js', 'dartboard.js', 'game.js', 'bot2.js', 'ui.js'].forEach(f => {
+  ['config.js', 'sounds.js', 'net.js', 'voice.js', 'stats.js', 'coach.js', 'dartboard.js', 'game.js', 'bot2.js', 'modes.js', 'tournament.js', 'tv.js', 'ui.js'].forEach(f => {
     vm.runInContext(fs.readFileSync(path.join(JS_DIR, f), 'utf8'), ctx, { filename: f });
   });
   ['playEvent', 'announceCheckout', 'announceBust', 'recordGameToCareer', 'initVoice', 'pickVoice', 'showToast'].forEach(fn => {
