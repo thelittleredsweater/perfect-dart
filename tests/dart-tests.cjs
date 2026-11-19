@@ -64,6 +64,8 @@ function loadGame(env) {
   if (!ctx.voiceSynth) ctx.voiceSynth = null;
   if (!ctx.voiceLang) ctx.voiceLang = 'off';
   vm.runInContext('this.__STATE = STATE; this.__CHECKOUTS = CHECKOUTS;', ctx);
+  // Rythme du bot accelere pour les tests (anciennes valeurs) ; le rythme reel est dans js/config.js.
+  vm.runInContext('Object.assign(BOT_DELAYS,{start:500,dart:400,end:500,next:0})', ctx);
   return {
     ctx, S: () => ctx.__STATE, exec: code => vm.runInContext(code, ctx),
     sleep: ms => new Promise(r => setTimeout(r, ms)), store: env.store, elFor: env.elFor,
@@ -172,6 +174,10 @@ async function tests501Double() {
     check(t.S().players[0].score === 321, 'base avant undo');
     t.exec('undoLast()');
     check(t.S().players[0].score === 501 && t.S().currentPlayer === 0, 'undo reprend le tour', 'score=' + t.S().players[0].score + ' cP=' + t.S().currentPlayer);
+    // v1.5.2 : undo flechette par flechette -> la volee rouverte garde ses 2 premieres flechettes
+    check(t.S().dartsThisTurn.length === 2, 'undo apres volee : une seule flechette retiree', 'n=' + t.S().dartsThisTurn.length);
+    t.exec('undoLast()'); t.exec('undoLast()');
+    check(t.S().dartsThisTurn.length === 0 && t.S().players[0].score === 501, 'undo successifs vident la volee');
     t.exec('skipTurn()');
     await t.sleep(700);
     check(t.S().currentPlayer === 1 && t.S().players[0].score === 501, 'passer saute le tour avec manque');
@@ -270,7 +276,13 @@ async function testsModes() {
     t.exec('STATE.aroundClock[0]=20');
     toPlayer(t, 0);
     await throwVisit(t, [[20, 1], [0, 1], [0, 1]]);
-    check(t.S().gameOver === true, '20 touche (passage BULL) -> victoire', 'gameOver=' + t.S().gameOver + ' cible=' + t.S().aroundClock[0]);
+    check(t.S().gameOver === false && t.S().aroundClock[0] === 21, '20 touche -> passage au BULL (pas encore gagne)', 'cible=' + t.S().aroundClock[0]);
+    toPlayer(t, 0);
+    await throwVisit(t, [[25, 1]]);
+    check(t.S().gameOver === true, 'BULL touche -> victoire', 'gameOver=' + t.S().gameOver);
+    const t2 = setupGame({ mode: 'around', players: ['A', 'B'] });
+    await throwVisit(t2, [[1, 1], [2, 1], [3, 1]]);
+    check(t2.S().aroundClock[0] === 4, 'volee 1-2-3 -> cible 4', 'cible=' + t2.S().aroundClock[0]);
   }
 }
 
@@ -545,7 +557,7 @@ async function testsVoiceRemote() {
     const played = [];
     env.Audio = class {
       constructor(src) { this.src = src; }
-      play() { played.push(this.src); return Promise.resolve(); }
+      play() { played.push(this.src); setTimeout(() => this.onended && this.onended(), 5); return Promise.resolve(); }
       pause() {}
     };
     env.__played = played;
@@ -616,6 +628,90 @@ async function testsVoiceRemote() {
     await t.sleep(80);
     check(spoken.length === 1 && spoken[0] === 'Jeu', 'synthese locale prioritaire quand disponible', JSON.stringify(spoken));
     check(fetched.length === 0 && played.length === 0, 'aucun appel distant quand synthese locale OK');
+  }
+}
+
+/* ---------------- v1.5.2 : checkout / undo / retour Android ---------------- */
+async function testsV152() {
+  console.log('\n== v1.5.2 ==');
+  { // 1. route de checkout selon les flechettes restantes
+    const t = loadGame(createEnv());
+    check(t.exec('checkoutRoute(101,3,true)') === 'T20 9 D16', 'checkout 101 / 3 flechettes');
+    check(t.exec('checkoutRoute(101,2,true)') === 'T17 DBull', 'checkout 101 / 2 flechettes', t.exec('checkoutRoute(101,2,true)'));
+    check(t.exec('checkoutRoute(101,1,true)') === null, 'checkout 101 / 1 flechette : aucune route');
+    check(t.exec('checkoutRoute(40,1,true)') === 'D20' && t.exec('checkoutRoute(50,1,true)') === 'DBull', 'checkout 1 flechette D20 / DBull');
+    let bad = 0;
+    for (let r = 2; r <= 170; r++) for (let d = 1; d <= 3; d++) {
+      const x = t.exec('checkoutRoute(' + r + ',' + d + ',true)'); if (!x) continue;
+      const toks = x.split(' '); const v = toks.map(k => k === 'DBull' ? 50 : k === 'Bull' ? 25 : k[0] === 'T' ? 3 * k.slice(1) : k[0] === 'D' ? 2 * k.slice(1) : +k);
+      if (v.reduce((a, b) => a + b) !== r || toks.length > d || !/^D/.test(toks[toks.length - 1])) bad++;
+    }
+    check(bad === 0, 'checkout : toutes les routes sont exactes, finies en double et tiennent dans les flechettes', 'bad=' + bad);
+    const g = setupGame({});
+    g.exec('STATE.players[0].score=161;STATE.currentPlayer=0;renderCheckout()');
+    check(g.elFor('checkoutRoute').textContent === 'T20 T17 DBull', 'affichage 161 avec 3 flechettes');
+    g.exec('throwDart(20,3)'); // reste 101, 2 flechettes
+    check(g.elFor('checkoutRoute').textContent === 'T17 DBull', 'affichage 101 avec 2 flechettes', g.elFor('checkoutRoute').textContent);
+    g.exec('throwDart(20,3)'); // reste 41, 1 flechette -> aucune route
+    check(!g.elFor('checkoutBox').classList.contains('active'), 'affichage masque sans route faisable');
+    // le bot vise la meme route
+    g.exec('STATE.dartsThisTurn=[];BOT2_SIGMA_OVERRIDE=0.01;__forceRandom=0.5');
+    const d = g.exec('botDart(101,1,120)');
+    check(d.baseValue === 17 && d.mult === 3, 'bot : meme route que l’affichage (101 / 2 fl. -> T17)', JSON.stringify(d));
+    g.exec('BOT2_SIGMA_OVERRIDE=0;__forceRandom=null');
+  }
+  { // 5. undo flechette par flechette, bot saute
+    const t = setupGame({ players: ['Greg'], bot: '60' });
+    t.exec('PLAYER_COUNT=1');
+    const s = t.S;
+    t.exec('STATE.players=[STATE.players[0],Object.assign(JSON.parse(JSON.stringify(STATE.players[0])),{name:"Bot",isBot:true})];STATE.currentPlayer=0;STATE.dartsThisTurn=[];STATE.history=[]');
+    // volee humaine puis volee bot simulee via endTurn
+    t.exec('STATE.dartsThisTurn=[{baseValue:20,value:60,label:"T20",mult:3},{baseValue:19,value:57,label:"T19",mult:3},{baseValue:5,value:5,label:"5",mult:1}];endTurn()');
+    t.exec('STATE.currentPlayer=1;STATE.isBotTurn=true;STATE.dartsThisTurn=[{baseValue:20,value:20,label:"20",mult:1}];endTurn();STATE.isBotTurn=false');
+    t.exec('gameSession++'); // coupe les timers du bot
+    check(s().players[0].score === 379 && s().players[1].score === 481, 'undo : base (humain 122, bot 20)', s().players[0].score + '/' + s().players[1].score);
+    t.exec('undoLast()');
+    check(s().currentPlayer === 0 && s().players[0].score === 501 && s().players[1].score === 501, 'undo saute la volee du bot');
+    check(s().dartsThisTurn.length === 2 && s().dartsThisTurn[1].label === 'T19', 'undo retire seulement la derniere flechette humaine', JSON.stringify(s().dartsThisTurn.map(d => d.label)));
+    t.exec('undoLast()');
+    check(s().dartsThisTurn.length === 1, 'undo suivant : une flechette de plus');
+  }
+  { // 5. Bob's 27 / Catch 40 : tour et vies restaures
+    const t = loadGame(createEnv({ cfgMode: 'bobs27' }));
+    t.exec('PLAYER_COUNT=1;startGame()');
+    const r0 = t.exec('STATE.bobsRound'), sc0 = t.S().players[0].score;
+    t.exec('STATE.dartsThisTurn=[{baseValue:0,value:0,label:"Manqué",mult:1},{baseValue:0,value:0,label:"Manqué",mult:1},{baseValue:0,value:0,label:"Manqué",mult:1}];endTurn()');
+    t.exec('undoLast()');
+    check(t.exec('STATE.bobsRound') === r0 && t.S().players[0].score === sc0 && t.S().dartsThisTurn.length === 2, "undo Bob's 27 : tour et score restaures");
+    const c = loadGame(createEnv({ cfgMode: 'catch40' }));
+    c.exec('PLAYER_COUNT=1;startGame()');
+    const l0 = c.exec('STATE.lives');
+    c.exec('STATE.dartsThisTurn=[{baseValue:1,value:1,label:"1",mult:1},{baseValue:1,value:1,label:"1",mult:1},{baseValue:1,value:1,label:"1",mult:1}];endTurn()');
+    check(c.exec('STATE.lives') === l0 - 1, 'catch40 : vie perdue');
+    c.exec('undoLast()');
+    check(c.exec('STATE.lives') === l0 && c.S().dartsThisTurn.length === 2, 'undo Catch 40 : vie restauree');
+  }
+  { // 7. bouton retour Android
+    const t = setupGame({});
+    let confirms = 0;
+    t.ctx.confirm = () => { confirms++; return false; };
+    check(t.exec('backAction()') === 'quit', 'retour en partie : demande de confirmation');
+    t.exec('handleBack()');
+    check(confirms === 1 && t.exec('currentScreen') === 'screenGame', 'retour en partie : confirmation refusee -> reste en partie');
+    t.ctx.confirm = () => true;
+    t.exec('handleBack()');
+    check(t.exec('currentScreen') === 'screenSetup', 'retour en partie : confirmation acceptee -> menu');
+    t.exec('showScreen("screenSettings")');
+    check(t.exec('handleBack()') === 'menu' && t.exec('currentScreen') === 'screenSetup', 'retour depuis Reglages -> menu');
+    check(t.exec('backAction()') === 'exit', 'retour au menu : 2e appui pour quitter');
+    // installation popstate : chaque retour remet une garde dans l'historique
+    const pushes = []; let pop = null;
+    t.ctx.history = { replaceState() {}, pushState(s) { pushes.push(s); } };
+    t.ctx.addEventListener = (ty, f) => { if (ty === 'popstate') pop = f; };
+    t.exec('initBackButton()');
+    t.exec('showScreen("screenStats")');
+    pop();
+    check(pushes.length === 2 && t.exec('currentScreen') === 'screenSetup', 'popstate : ecran precedent + garde remise', 'pushes=' + pushes.length);
   }
 }
 
@@ -951,6 +1047,7 @@ async function run() {
   await testsNetOffline();
   await testsVoiceRemote();
   await testsPhase2Fixes();
+  await testsV152();
   console.log('\n========================================');
   console.log('RESULTAT : ' + passed + ' PASS / ' + failed + ' FAULT');
   if (failures.length) { console.log('\nFAILLES :'); failures.forEach(f => console.log(' - ' + f)); }

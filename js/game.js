@@ -52,7 +52,7 @@ function startGame(){
   }
   STATE.currentPlayer=0;STATE.dartsThisTurn=[];STATE.currentMult=1;
   STATE.history=[];STATE.log=[];STATE.turnCount=0;STATE.gameOver=false;
-  STATE.isBotTurn=false;STATE.startTime=Date.now();STATE.throwHistory=[];
+  STATE.isBotTurn=false;STATE.botShowing=false;STATE.startTime=Date.now();STATE.throwHistory=[];
   showScreen('screenGame');buildBoard();applyQuickScoresVisibility();setInputMethod(SETTINGS.inputMethod);
   renderAll();saveGame();playEvent('start');maybeBotTurn();
 }
@@ -65,6 +65,7 @@ function setMult(m){if(STATE.isBotTurn||STATE.gameOver)return;STATE.currentMult=
 
 /* ================== Volée en cours ================== */
 function throwDart(baseValue,forcedMult){
+  if(baseValue===25&&(forcedMult||STATE.currentMult)===3){showToast('Pas de triple Bull','error');setMult(1);return}
   if(window.NET&&NET.mode==='client'){
     const mult=forcedMult||STATE.currentMult;
     let value=baseValue===0?0:baseValue*mult,label='';
@@ -84,6 +85,7 @@ function throwDart(baseValue,forcedMult){
   setMult(1);renderDarts();renderStats();renderCheckout();
   if(STATE.dartsThisTurn.length===3){scheduleVisitEnd(450)}
   else if(isX01Mode()){const r=remainingAfterVisit();if(r<=0||(STATE.finishDouble&&r===1))scheduleVisitEnd(450)}
+  else if(STATE.mode==='around'&&aroundTargetAfter(STATE.currentPlayer,STATE.dartsThisTurn)>21)scheduleVisitEnd(450);
 }
 function quickScore(total){
   if(window.NET&&NET.mode==='client'){netSend({t:'quick',value:total});return}
@@ -105,7 +107,15 @@ function endTurn(){
   if(STATE.gameOver||STATE.dartsThisTurn.length===0)return;
   saveState();
   const player=STATE.players[STATE.currentPlayer];
-  if(applyVisitResult(player))return;
+  if(applyVisitResult(player)){STATE.isBotTurn=false;STATE.botShowing=false;return}
+  /* Bot : on laisse le nouveau score affiché un moment avant de passer la main. */
+  if(player.isBot&&STATE.isBotTurn&&BOT_DELAYS.next>0){
+    STATE.botShowing=true;renderAll();
+    const sid=gameSession;
+    setTimeout(()=>{if(sid!==gameSession)return;STATE.isBotTurn=false;STATE.botShowing=false;finishVisitTurn()},BOT_DELAYS.next);
+    return;
+  }
+  STATE.isBotTurn=false;
   finishVisitTurn();
 }
 function applyVisitResult(player){
@@ -119,7 +129,7 @@ function applyVisitResult(player){
   }
 }
 function finishVisitTurn(){
-  STATE.turnCount++;STATE.dartsThisTurn=[];
+  STATE.botShowing=false;STATE.turnCount++;STATE.dartsThisTurn=[];
   STATE.currentPlayer=(STATE.currentPlayer+1)%STATE.players.length;
   renderAll();saveGame();
   const sid=gameSession;
@@ -140,8 +150,9 @@ function applyX01Result(player){
   if(newScore<0){isBust=true;logMsg=`💥 BUST ${player.name} : ${total} (score négatif) — reste ${player.score}`;logCls='bust-log'}
   else if(newScore===1&&STATE.finishDouble){isBust=true;logMsg=`💥 BUST ${player.name} : ${total} (reste 1) — reste ${player.score}`;logCls='bust-log'}
   else if(newScore===0&&STATE.finishDouble){const last=eff[eff.length-1];if(!last||last.mult!==2){isBust=true;logMsg=`💥 BUST ${player.name} : finish sans double`;logCls='bust-log'}}
-  const lastDart=eff[eff.length-1];
-  if(lastDart&&lastDart.mult===2){player.doublesAttempted++;if(!isBust&&newScore>=0)player.doublesHit++}
+  if(STATE.finishDouble&&!eff.some(d=>d.ndarts)){let rem=player.score;for(const d of eff){if(rem===50||(rem>=2&&rem<=40&&rem%2===0))player.doublesAttempted++;rem-=d.value;if(rem<=1)break}
+    if(newScore===0&&!isBust)player.doublesHit++}
+  if(player.score<=CHECKOUT_MAX&&(CHECKOUTS[player.score]||!STATE.finishDouble)&&(!STATE.doubleIn||player.started))player.checkoutsAttempted++;
   const dartsBefore=player.dartsThrown;
   player.dartsThrown+=visitDarts();
   /* First 9 : points comptés sur les 9 premières fléchettes (bust = 0 point). */
@@ -154,7 +165,7 @@ function applyX01Result(player){
     if(total>player.bestTurn)player.bestTurn=total;
     player.turnHistory.push(total);player.scoreHistory.push(newScore);
     if(total===180)player.count180++;if(total>=140)player.count140++;if(total>=100)player.count100++;if(total>=60)player.count60++;
-    if(newScore===0){player.checkouts++;player.checkoutsAttempted++;announceCheckout();
+    if(newScore===0){player.checkouts++;announceCheckout();
       logMsg=`🎯 CHECKOUT ${player.name} : ${eff.map(d=>d.label).join(' + ')} = ${total} !`;
       STATE.log.unshift({msg:logMsg,cls:'checkout-log'});
       STATE.throwHistory.push({player:player.name,darts:[...eff],total,bust:false,remaining:0});
@@ -207,19 +218,16 @@ function applyCricketResult(player){
 }
 
 /* ================== Around the Clock (simples 1, doubles 2, triples 3) ================== */
+function aroundHit(d,target,need){if(target>20)return d.baseValue===25&&(need===1||d.mult===2);return d.baseValue===target&&(need===1||d.mult===need)}
+function aroundTargetAfter(idx,darts){let c=STATE.aroundClock[idx]||1;const need=STATE.aroundVariant||1;darts.forEach(d=>{if(c<=21&&aroundHit(d,c,need))c++});return c}
 function applyAroundResult(player){
-  const idx=STATE.currentPlayer;
-  let current=STATE.aroundClock[idx]||1;
-  const need=STATE.aroundVariant||1;
-  let hitTarget=false;
-  STATE.dartsThisTurn.forEach(d=>{
-    const onBull=current>=21;
-    if((onBull?d.baseValue===25:d.baseValue===current)&&d.mult===need)hitTarget=true;
-  });
-  player.turns++;player.dartsThrown+=STATE.dartsThisTurn.length;
-  if(hitTarget){STATE.aroundClock[idx]=current+1;player.score++}
-  STATE.log.unshift({msg:`${player.name} : cible ${current>20?'BULL':current}${need>1?'×'+need:''}${hitTarget?' ✓':' ✗'} → ${STATE.aroundClock[idx]>20?'BULL':STATE.aroundClock[idx]}`,cls:hitTarget?'highlight':''});
-  if(STATE.aroundClock[idx]>20&&hitTarget){endGame(player);return true}
+  const idx=STATE.currentPlayer,start=STATE.aroundClock[idx]||1,need=STATE.aroundVariant||1;
+  const end=aroundTargetAfter(idx,STATE.dartsThisTurn);
+  STATE.aroundClock[idx]=end;
+  player.turns++;player.dartsThrown+=STATE.dartsThisTurn.length;player.score+=end-start;
+  const lbl=v=>v>20?'BULL':v;
+  STATE.log.unshift({msg:`${player.name} : ${lbl(start)} → ${end>21?'TERMINÉ':lbl(end)}${end>start?' (+'+(end-start)+')':' ✗'}`,cls:end>start?'highlight':''});
+  if(end>21){endGame(player);return true}
   return false;
 }
 
@@ -299,16 +307,43 @@ function botRouteDart(tok,avg){
 }
 /* Jeu générique (pas de checkout visable) : triple/singles/1/5/manques. */
 function botGenericDart(avg){
-  const s=botSkill(avg);
-  const k=Math.max(0,(avg/3-60*s.hT)/15.33);
+  const s=botSkill(avg),n=botScoringTarget(avg);
+  const i=BOARD_ORDER.indexOf(n),nb=[BOARD_ORDER[(i+19)%20],BOARD_ORDER[(i+1)%20]];
+  /* Calibration conservée : espérance 3n·hT + a·n + b·voisins = avg/3 quelle que soit la cible. */
+  const k=Math.max(0,(avg/3-3*n*s.hT)/(2*n/3+(nb[0]+nb[1])/6));
   const a=k*2/3,b=k/3;
   const r=Math.random();
-  if(r<s.hT)return mkDart(20,3);
-  if(r<s.hT+a)return mkDart(20,1);
-  if(r<s.hT+a+b)return mkDart(Math.random()<.5?5:1,1);
+  if(r<s.hT)return mkDart(n,3);
+  if(r<s.hT+a)return mkDart(n,1);
+  if(r<s.hT+a+b)return mkDart(nb[Math.random()<.5?0:1],1);
   return mkMiss();
 }
+/* Cible de marquage du bot (numéro 20/19/18/17) : tirée à chaque volée (T20
+   majoritaire, plus de dispersion aux petits niveaux), changée après des ratés
+   dans la volée, et après une volée blanche sur la même cible. */
+const botAim={};
+function botScoringTarget(avg){
+  const idx=STATE.currentPlayer,key=gameSession+':'+STATE.turnCount+':'+idx;
+  const lvl=avg>=80?0:avg>=55?1:2;
+  const W=[[.74,.16,.06,.04],[.6,.22,.11,.07],[.44,.26,.17,.13]][lvl],B=[20,19,18,17];
+  const pick=ex=>{const ws=B.map((b,i)=>b===ex?0:W[i]);let r=Math.random()*ws.reduce((x,y)=>x+y,0);for(let i=0;i<4;i++){r-=ws[i];if(r<0)return B[i]}return 20};
+  const darts=STATE.dartsThisTurn||[],last=darts[darts.length-1];
+  let a=botAim[idx];
+  if(!a||a.key!==key){
+    const poor=a&&a.seen>=2&&a.hits===0;
+    a=botAim[idx]={key,base:poor&&Math.random()<.6?pick(a.base):pick(),miss:0,hits:0,seen:0};
+  }else if(last){
+    a.seen++;
+    if(last.baseValue===a.base)a.hits++;
+    else if(++a.miss>=(lvl===2?1:2)&&Math.random()<(lvl===2?.6:.45)){a.base=pick(a.base);a.miss=0}
+    if(lvl===2&&Math.random()<.12)a.base=pick(a.base);
+  }
+  return a.base;
+}
 function botDart(remaining,used,avg){
+  /* Même route que l'affichage (checkoutRoute) : tient compte des fléchettes restantes. */
+  const route=checkoutRoute(remaining,3-used,STATE.finishDouble);
+  if(route&&(remaining<=66||Math.random()<Math.min(.95,.7+avg/200)))return botRouteDart(route.split(' ')[0],avg);
   /* Défense anti-bust : en double out, au-dessous de 67, viser uniquement ce qui
      garde un score finissable (≥2, en paire) — jamais un dart de bombé. */
   if(STATE.finishDouble&&remaining>1&&remaining<=66){
@@ -321,11 +356,6 @@ function botDart(remaining,used,avg){
     return botRouteDart(String(s),avg);
   }
   if(!STATE.finishDouble&&remaining<=20)return botRouteDart(String(remaining),avg);
-  const route=remaining>=2&&remaining<=CHECKOUT_MAX?CHECKOUTS[remaining]:null;
-  if(route){
-    const toks=route.split(' ');
-    if(used<toks.length&&toks.length<=3-used&&Math.random()<Math.min(.95,.7+avg/200))return botRouteDart(toks[used],avg);
-  }
   if(STATE.finishDouble&&used<2&&remaining>2&&remaining<=40&&remaining%2===0&&Math.random()<.5)return botRouteDart('D'+(remaining/2),avg);
   if(remaining>=60&&Math.random()<Math.max(0,(avg-20)/120))return botRouteDart('T20',avg);
   if(!STATE.finishDouble&&remaining===1)return botRouteDart('1',avg);
@@ -364,37 +394,51 @@ function maybeBotTurn(){
   if(!player||!player.isBot)return;
   STATE.isBotTurn=true;renderAll();
   const avg=STATE.botAvg||BOT_DEFAULT;
-  let count=0;const sid=gameSession;
+  let count=STATE.dartsThisTurn.length;const sid=gameSession;
   const throwNext=()=>{
     if(sid!==gameSession)return;
-    if(count>=3||STATE.gameOver){setTimeout(()=>{if(sid!==gameSession)return;STATE.isBotTurn=false;endTurn()},500);return}
+    if(count>=3||STATE.gameOver){setTimeout(()=>{if(sid!==gameSession)return;endTurn()},BOT_DELAYS.end);return}
     const remaining=player.score-STATE.dartsThisTurn.reduce((s,d)=>s+d.value,0);
     const dart=STATE.mode==='around'
-      ?simulateAroundDart(avg,STATE.aroundClock[STATE.currentPlayer]||1)
+      ?simulateAroundDart(avg,aroundTargetAfter(STATE.currentPlayer,STATE.dartsThisTurn))
       :STATE.mode==='cricket'
         ?botCricketDart(avg)
         :botDart(remaining,STATE.dartsThisTurn.length,avg);
     STATE.dartsThisTurn.push(dart);renderDarts();announceDart(dart);count++;
     if(isX01Mode()){const r=remaining-dart.value;if(r<=0||(STATE.finishDouble&&r===1))count=3}
-    setTimeout(throwNext,400);
+    else if(STATE.mode==='around'&&aroundTargetAfter(STATE.currentPlayer,STATE.dartsThisTurn)>21)count=3;
+    setTimeout(throwNext,BOT_DELAYS.dart);
   };
-  setTimeout(throwNext,500);
+  setTimeout(throwNext,BOT_DELAYS.start);
 }
 
 /* ================== Undo / passer / quitter ================== */
-function saveState(){STATE.history.push({players:JSON.parse(JSON.stringify(STATE.players)),currentPlayer:STATE.currentPlayer,log:JSON.parse(JSON.stringify(STATE.log)),turnCount:STATE.turnCount,throwHistory:JSON.parse(JSON.stringify(STATE.throwHistory)),cricketMarks:JSON.parse(JSON.stringify(STATE.cricketMarks)),aroundClock:JSON.parse(JSON.stringify(STATE.aroundClock))});if(STATE.history.length>100)STATE.history.shift()}
+function saveState(){STATE.history.push({players:JSON.parse(JSON.stringify(STATE.players)),currentPlayer:STATE.currentPlayer,log:JSON.parse(JSON.stringify(STATE.log)),turnCount:STATE.turnCount,throwHistory:JSON.parse(JSON.stringify(STATE.throwHistory)),cricketMarks:JSON.parse(JSON.stringify(STATE.cricketMarks)),aroundClock:JSON.parse(JSON.stringify(STATE.aroundClock)),darts:JSON.parse(JSON.stringify(STATE.dartsThisTurn)),bobsRound:STATE.bobsRound,lives:STATE.lives});if(STATE.history.length>100)STATE.history.shift()}
 function undoLast(){
   if(window.NET&&NET.mode==='client'){netSend({t:'undo'});return}
   if(STATE.isBotTurn)return;
   if(STATE.gameOver){showToast('Partie terminée','error');return}
   if(STATE.visitClosing){clearTimeout(visitTimer);visitTimer=null;STATE.visitClosing=false}
-  if(STATE.dartsThisTurn.length>0){STATE.dartsThisTurn.pop();renderDarts();renderStats();renderCheckout();return}
+  /* Une fléchette à la fois : d'abord celles de la volée en cours… */
+  if(STATE.dartsThisTurn.length>0){STATE.dartsThisTurn.pop();renderAll();saveGame();return}
   if(STATE.history.length===0){showToast('Rien à annuler','error');return}
-  const prev=STATE.history.pop();
+  /* …puis on rouvre la volée précédente (état d'avant la volée + ses fléchettes
+     sauf la dernière). Les volées du bot sont sautées : retour à la dernière
+     fléchette humaine. */
+  let prev=STATE.history.pop();
+  const isBotSnap=h=>!!(h.players[h.currentPlayer]&&h.players[h.currentPlayer].isBot);
+  while(isBotSnap(prev)&&STATE.history.length)prev=STATE.history.pop();
   STATE.players=prev.players;STATE.currentPlayer=prev.currentPlayer;STATE.log=prev.log;
   STATE.turnCount=prev.turnCount;STATE.throwHistory=prev.throwHistory;
   STATE.cricketMarks=prev.cricketMarks;STATE.aroundClock=prev.aroundClock;
+  if(prev.bobsRound!==undefined)STATE.bobsRound=prev.bobsRound;
+  if(prev.lives!==undefined)STATE.lives=prev.lives;
+  STATE.botShowing=false;
+  const darts=prev.darts||[];
+  /* Volée saisie d'un bloc (quickScore) ou « passé » : rien à remettre. */
+  STATE.dartsThisTurn=isBotSnap(prev)||darts.some(d=>d.ndarts||d.label==='Passé')?[]:darts.slice(0,-1);
   renderAll();saveGame();showToast('↩️ Annulé','success');
+  if(isBotSnap(prev)){const sid=gameSession;setTimeout(()=>{if(sid===gameSession)maybeBotTurn()},600)}
 }
 function skipTurn(){
   if(window.NET&&NET.mode==='client'){netSend({t:'pass'});return}
@@ -404,7 +448,7 @@ function skipTurn(){
 }
 function confirmQuit(){
   if(confirm('Quitter la partie en cours ?')){
-    gameSession++;visitTimer=null;STATE.visitClosing=false;STATE.isBotTurn=false;
+    gameSession++;visitTimer=null;STATE.visitClosing=false;STATE.isBotTurn=false;STATE.botShowing=false;
     saveGame();
     if(window.NET&&NET.ws){NET.started=false;try{NET.ws.close()}catch(e){}NET.ws=null}
     showScreen('screenSetup');
@@ -495,7 +539,7 @@ function resumeSavedGame(){
   const save=loadGameSave();
   if(!save){showToast('Aucune partie sauvegardée','error');return}
   if(save.gameOver){showToast('La partie est terminée','error');return}
-  Object.assign(STATE,{players:save.players||[],currentPlayer:save.currentPlayer||0,mode:save.mode,finishDouble:save.finishDouble,doubleIn:!!save.doubleIn,cutThroat:!!save.cutThroat,aroundVariant:save.aroundVariant||1,botAvg:clampBotAvg(save.botAvg),maxTurns:save.maxTurns||0,lives:save.lives||0,bobsRound:save.bobsRound||0,voiceLang:save.voiceLang,dartsThisTurn:save.dartsThisTurn||[],history:save.history||[],log:save.log||[],turnCount:save.turnCount,gameOver:false,startTime:save.startTime,throwHistory:save.throwHistory||[],cricketMarks:save.cricketMarks||{},aroundClock:save.aroundClock||{}});
+  Object.assign(STATE,{players:save.players||[],currentPlayer:save.currentPlayer||0,mode:save.mode,finishDouble:save.finishDouble,doubleIn:!!save.doubleIn,cutThroat:!!save.cutThroat,aroundVariant:save.aroundVariant||1,botAvg:clampBotAvg(save.botAvg),maxTurns:save.maxTurns||0,lives:save.lives||0,bobsRound:save.bobsRound||0,voiceLang:save.voiceLang,dartsThisTurn:save.dartsThisTurn||[],botShowing:false,isBotTurn:false,history:save.history||[],log:save.log||[],turnCount:save.turnCount,gameOver:false,startTime:save.startTime,throwHistory:save.throwHistory||[],cricketMarks:save.cricketMarks||{},aroundClock:save.aroundClock||{}});
   voiceLang=STATE.voiceLang;
   showScreen('screenGame');buildBoard();applyQuickScoresVisibility();setInputMethod(SETTINGS.inputMethod);renderAll();
   if(STATE.dartsThisTurn.length>=3){endTurn()}else{maybeBotTurn()}

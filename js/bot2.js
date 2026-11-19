@@ -166,15 +166,24 @@ function botDart2(remaining,used,avg){
   const sigma=(typeof BOT2_SIGMA_OVERRIDE==='number'&&BOT2_SIGMA_OVERRIDE>0)?BOT2_SIGMA_OVERRIDE:b2SigmaOf(avg);
   const r=Math.max(0,Math.round(remaining));
   if(r<=170){
-    const pol=b2PolicyOf(STATE.finishDouble,sigma);
     const dartsLeft=3-Math.max(0,Math.min(2,used));
+    /* Même logique que l'affichage : route faisable avec les fléchettes restantes. */
+    const route=checkoutRoute(r,dartsLeft,STATE.finishDouble);
+    if(route)return b2Dart(b2Tok(route.split(' ')[0]),sigma);
+    const pol=b2PolicyOf(STATE.finishDouble,sigma);
     const tok=pol.best[dartsLeft]&&pol.best[dartsLeft][r];
     if(tok)return b2Dart(tok,sigma);
   }
-  /* au-dela de 170 : viser T20 */
-  return b2Dart('T20',sigma);
+  /* au-dela de 170 : cible de marquage variée, comme un vrai joueur. */
+  return b2Dart(b2ScoringTarget(avg),sigma);
 }
 var BOT2_SIGMA_OVERRIDE=0;
+/* Choix de la cible de marquage pour la volée : T20 majoritaire, T19 en
+   alternance (surtout si le 20 a été raté/bloqué), T18/T17 pour les petits
+   niveaux. Garde la cible sur toute la volée sauf après un raté du 20. */
+function b2ScoringTarget(avg){return 'T'+botScoringTarget(avg)}
+/* Jeton de route (CHECKOUTS / checkoutRoute) -> clé de cible géométrique. */
+function b2Tok(t){return t==='DBull'?'DB':t==='Bull'?'25':/^[TD]/.test(t)?t:'S'+t}
 /* Bot around : geometry sur la cible courante. */
 function botAround2(avg,target){
   const need=STATE.aroundVariant||1;

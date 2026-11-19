@@ -1,19 +1,26 @@
 {
-  "name": "Perfect Dart",
+  "name": "Perfect Darts",
   "packageId": "com.greg.perfectdarts",
-  "version": "1.5.0",
+  "version": "1.5.2",
   "entry": "index.html",
   "exclude": [
+    ".github",
+    "90",
+    "TESTS-TERRAIN.md",
+    "apk-qr.png",
+    "dist",
+    "node_modules",
     "server.cjs",
     "tests",
-    "tools",
-    "TESTS-TERRAIN.md"
+    "tests-run.log",
+    "tools"
   ],
   "icon": "img/icons/app-icon.png",
   "orientation": "auto",
   "statusBar": true,
   "permissions": [
-    "INTERNET"
+    "INTERNET",
+    "VIBRATE"
   ],
   "network": {
     "cleartext": true

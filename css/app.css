@@ -22,6 +22,14 @@ button{font-family:inherit}
   #screenGame{background:url('../img/game-bg.jpg') center top/cover no-repeat #05070f}
   #screenGame::after{display:none}
 }
+/* Tablettes / grands ecrans : fond haute resolution (evite la pixelisation).
+   Condition elargie : les tablettes (~768px CSS, ratio 2x) doivent charger
+   les images -large, sinon le fond est pixelise. */
+@media(min-width:900px),(min-width:600px) and (min-resolution:1.8dppx),(min-width:600px) and (-webkit-min-device-pixel-ratio:1.8){
+  #screenGame::after{background-image:url('../img/game-bg-large.jpg')}
+  #screenGame{background-image:url('../img/game-bg-large.jpg')}
+  #screenSetup{background-image:url('../img/hero-dartboard-large.jpg')}
+}
 .screen.active{display:block;animation:fadeUp .4s cubic-bezier(0.34,1.56,0.64,1)}
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .container{max-width:570px;margin:0 auto;padding:16px}
@@ -52,7 +60,7 @@ select{background-image:url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http
 .btn-sm{padding:12px 16px;font-size:.85em;min-height:46px}
 .btn-row{display:flex;gap:10px;margin-top:10px}
 .btn-row .btn{flex:1;min-width:0}
-.hud{position:sticky;top:0;z-index:100;background:rgba(7,9,26,.7);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);padding:14px 16px;border-bottom:1px solid var(--bord-s);box-shadow:0 4px 32px rgba(0,0,0,.5)}
+.hud{position:sticky;top:0;z-index:100;background:rgba(7,9,26,.78);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:14px 16px;border-bottom:1px solid var(--bord-s);box-shadow:0 4px 32px rgba(0,0,0,.5)}
 .hud-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:.8em}
 .hud-mode{color:var(--dim);font-weight:800;text-transform:uppercase;letter-spacing:1.2px;padding:4px 10px;background:rgba(8,11,24,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:20px;border:1px solid var(--bord);text-shadow:0 1px 4px rgba(0,0,0,.8)}
 .hud-turn{color:var(--acc);font-weight:800;display:flex;align-items:center;gap:8px;font-size:1.05em}
@@ -87,22 +95,22 @@ select{background-image:url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http
 .stat-item .st-lbl{color:var(--dim);font-size:.68em;text-transform:uppercase;letter-spacing:.8px;margin-top:5px;font-weight:700}
 .board-container{padding:0 16px}
 .board-toggle{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.bt-btn{padding:12px 8px;border-radius:12px;border:1px solid var(--bord);background:rgba(255,255,255,.06);color:var(--dim);font-weight:800;font-size:.85em;cursor:pointer;min-height:46px;backdrop-filter:blur(8px);transition:all .18s}
+.bt-btn{padding:12px 8px;border-radius:12px;border:1px solid var(--bord);background:rgba(255,255,255,.06);color:var(--dim);font-weight:800;font-size:.85em;cursor:pointer;min-height:46px;transition:all .18s}
 .bt-btn.selected{border-color:var(--acc);color:#fff;background:linear-gradient(135deg,var(--acc-g),transparent);box-shadow:0 0 16px var(--acc-g)}
 #dartboard{display:block;width:100%;max-width:460px;margin:0 auto;filter:drop-shadow(0 8px 32px rgba(0,0,0,.5));touch-action:manipulation}
 #dartboard text{fill:#f2f5ff;font-size:34px;font-weight:900;letter-spacing:1px;text-anchor:middle;dominant-baseline:middle;paint-order:stroke;stroke:#0d0f16;stroke-width:6px;stroke-linejoin:round;pointer-events:none}
 #dartboard [data-base]{cursor:pointer;transition:opacity .12s}
 #dartboard [data-base]:active{opacity:.6}
 .multiplier-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
-.mult-btn{padding:16px 8px;border-radius:12px;border:2px solid var(--bord);background:rgba(255,255,255,.06);color:var(--dim);font-weight:900;font-size:.9em;cursor:pointer;transition:all .18s;min-height:52px;backdrop-filter:blur(8px)}
+.mult-btn{padding:16px 8px;border-radius:12px;border:2px solid var(--bord);background:rgba(255,255,255,.06);color:var(--dim);font-weight:900;font-size:.9em;cursor:pointer;transition:all .18s;min-height:52px}
 .mult-btn.selected[data-m="1"]{border-color:var(--acc);background:linear-gradient(135deg,var(--acc-g),transparent);color:#fff;box-shadow:0 0 20px var(--acc-g)}
 .mult-btn.selected[data-m="2"]{border-color:var(--green);background:linear-gradient(135deg,rgba(0,230,118,.35),rgba(0,230,118,.15));color:var(--green);box-shadow:0 0 20px var(--green-g)}
 .mult-btn.selected[data-m="3"]{border-color:var(--gold);background:linear-gradient(135deg,rgba(255,215,0,.3),rgba(255,215,0,.15));color:var(--gold);box-shadow:0 0 20px var(--gold-g)}
 .quick-scores{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px}
-.qs-btn{padding:14px 4px;border-radius:10px;border:1px solid var(--bord);background:rgba(255,255,255,.06);color:var(--txt);font-weight:900;font-size:.85em;cursor:pointer;min-height:46px;backdrop-filter:blur(8px)}
+.qs-btn{padding:14px 4px;border-radius:10px;border:1px solid var(--bord);background:rgba(255,255,255,.06);color:var(--txt);font-weight:900;font-size:.85em;cursor:pointer;min-height:46px}
 .qs-btn:active{background:linear-gradient(135deg,var(--acc),var(--acc-l));color:#fff;transform:scale(.94)}
 .board-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px}
-.num-btn{padding:18px 4px;border-radius:12px;border:1px solid var(--bord-s);background:rgba(255,255,255,.07);color:var(--txt);font-size:1.15em;font-weight:900;cursor:pointer;transition:all .12s;min-height:56px;box-shadow:0 2px 8px rgba(0,0,0,.2);backdrop-filter:blur(6px)}
+.num-btn{padding:18px 4px;border-radius:12px;border:1px solid var(--bord-s);background:rgba(255,255,255,.07);color:var(--txt);font-size:1.15em;font-weight:900;cursor:pointer;transition:all .12s;min-height:56px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .num-btn:active{transform:scale(.92);box-shadow:0 0 28px var(--acc-g);border-color:var(--acc);background:var(--acc);color:#fff}
 .num-btn.bull{grid-column:span 5;background:linear-gradient(135deg,#e74c3c,#c0392b);border:none;color:#fff;font-size:1.05em;padding:18px;box-shadow:0 4px 16px rgba(231,76,60,.35)}
 .num-btn.miss{grid-column:span 5;background:rgba(10,14,24,.55);color:var(--muted);border:1px dashed var(--bord-s);font-size:.95em;padding:16px}
@@ -163,12 +171,20 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   html{font-size:17px}
   .container{max-width:760px}
   .setup-logo h1{font-size:4em}
-  #dartboard{max-width:570px}
+  #dartboard{max-width:640px}
   .hud{padding:16px 24px}
   .hud-player .h-score{font-size:2em}
-  .dart-slot{width:74px;height:74px}
+  .dart-slot{width:84px;height:84px;font-size:.95em}
   .players-grid{gap:12px}
   .stats-grid{max-width:480px}
+  /* Format tablette portrait : pavé et boutons agrandis */
+  .num-btn{min-height:70px;padding:16px 6px;font-size:1.3em;border-radius:14px}
+  .num-btn.bull{min-height:70px}
+  .qs-btn{min-height:58px;font-size:1em;border-radius:12px}
+  .mult-btn{min-height:64px;font-size:1.05em;border-radius:14px}
+  .bt-btn{min-height:56px;font-size:.95em}
+  .quick-scores,.board-grid{gap:10px}
+  .multiplier-bar{gap:12px}
 }
 @media(min-width:1200px){
   html{font-size:18px}
@@ -231,6 +247,17 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   #screenGame .game-left{flex:0 0 200px}
   #dartboard{max-width:225px}
   #screenSetup .container{grid-template-columns:1fr 1fr 1fr}
+}
+/* Tablette en paysage (ecran haut) : les regles ci-dessus, taillees pour
+   telephone, laissaient une cible minuscule (285px) au milieu d'un grand
+   ecran. On redimensionne cible et boutons a l'espace disponible. */
+@media(orientation:landscape) and (min-width:768px) and (min-height:560px){
+  .game-left{flex:0 0 clamp(240px,26vw,340px)}
+  #dartboard{max-width:min(440px,58vh)}
+  .num-btn{min-height:54px;padding:12px 4px;font-size:1.15em}
+  .qs-btn,.bt-btn,.mult-btn{min-height:50px;padding:12px 6px}
+  .dart-slot{width:58px;height:58px}
+  .controls .btn{min-height:46px}
 }
 
 /* ===== Mode OLED : noirs profonds (Réglages > Écran OLED) ===== */
@@ -309,3 +336,56 @@ body[data-oled="1"] .cb-p.active,body[data-oled="1"] .cb-s.active{background:rgb
 .rules-text p{margin:4px 0}
 body[data-theme="light"] .rules-box{background:rgba(23,27,48,.04)}
 body[data-oled="1"] .rules-box{background:rgba(13,16,26,.9)}
+
+/* Cricket — lisibilité renforcée (v1.5.1) */
+.cricket-board{padding:10px 12px}
+.cb-grid{gap:5px}
+.cb-row{gap:6px}
+.cb-t{justify-content:center;font-family:var(--font-display);font-size:22px;color:var(--text);letter-spacing:1px}
+.cb-t.cb-done{text-decoration:line-through;opacity:.35}
+.cb-p{font-size:14px;color:var(--text);font-weight:800;padding:6px 2px}
+.cb-p.active{color:#fff;background:var(--acc)}
+.cb-m{height:42px;font-size:24px;letter-spacing:3px}
+.cb-m.m1{color:var(--acc-l)}
+.cb-m.m2{color:var(--acc-l);background:rgba(255,255,255,.09)}
+.cb-m.active{outline:2px solid var(--acc);outline-offset:-2px}
+.cb-m.closed{font-size:26px}
+.cb-score .cb-t{font-size:16px}
+.cb-s{font-size:2em;padding:8px 2px;font-weight:800}
+.cb-s.active{color:#fff;background:var(--acc)}
+body[data-theme="light"] .cb-m.m2{background:rgba(23,27,48,.1)}
+
+/* ================== v1.5.2 : tableau Cricket lisible ==================
+   (l'ancien style utilisait var(--text), non défini -> texte blanc sur fond clair) */
+.cb-grid{gap:6px;padding:8px;border-radius:14px;background:#0b1020;border:1px solid rgba(255,255,255,.14)}
+.cb-t{color:#fff;font-size:26px;font-weight:800}
+.cb-t.cb-done{opacity:.5}
+.cb-score .cb-t{font-size:18px;color:#fff}
+.cb-p{font-size:15px;color:#e8ebf8;font-weight:800;border-radius:10px}
+.cb-m{height:46px;font-size:28px;color:#fff;background:#1a2136;border:1px solid #2c3552}
+.cb-m.m1,.cb-m.m2{color:#fff;background:#232c46}
+.cb-m.closed{color:#fff;background:var(--acc);border-color:var(--acc);font-size:30px;text-shadow:0 1px 3px rgba(0,0,0,.55)}
+.cb-s{font-size:2.3em;color:#fff;font-weight:800;border-radius:10px}
+.cb-p.active,.cb-s.active{color:#fff;background:#2a3456;box-shadow:inset 0 0 0 3px var(--acc);text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.cb-m.active{outline:none;box-shadow:inset 0 0 0 2px var(--acc)}
+body[data-theme="light"] .cb-grid{background:#fff;border-color:#c5cbe0}
+body[data-theme="light"] .cb-t,body[data-theme="light"] .cb-score .cb-t,body[data-theme="light"] .cb-p,body[data-theme="light"] .cb-s{color:#11152a}
+body[data-theme="light"] .cb-m{color:#11152a;background:#e8ebf4;border-color:#c5cbe0}
+body[data-theme="light"] .cb-m.m1,body[data-theme="light"] .cb-m.m2{color:#11152a;background:#d9deec}
+body[data-theme="light"] .cb-m.closed{color:#fff;background:var(--acc);border-color:var(--acc)}
+body[data-theme="light"] .cb-p.active,body[data-theme="light"] .cb-s.active{color:#11152a;background:#fff3c4;box-shadow:inset 0 0 0 3px var(--acc);text-shadow:none}
+
+/* ================== v1.5.2 : pavé de saisie opaque ================== */
+.num-btn,.qs-btn,.mult-btn,.bt-btn,
+body[data-oled="1"] .num-btn,body[data-oled="1"] .qs-btn,body[data-oled="1"] .mult-btn,body[data-oled="1"] .bt-btn{background:#1d2440;border:1px solid #3a4468;color:#f4f6ff}
+.mult-btn{color:#dfe3f5}
+.num-btn.miss,body[data-oled="1"] .num-btn.miss{background:#141a2e;color:#c9cfe6;border:1px dashed #4a5578}
+.num-btn.bull,body[data-oled="1"] .num-btn.bull{background:#c0392b;border:none;color:#fff}
+body[data-theme="light"] .num-btn,body[data-theme="light"] .qs-btn,body[data-theme="light"] .mult-btn,body[data-theme="light"] .bt-btn{background:#fff;border-color:#b3bbd4;color:#11152a;box-shadow:0 1px 3px rgba(23,27,48,.15)}
+body[data-theme="light"] .num-btn.miss{background:#eceff6;color:#3b4266;border-color:#9aa3c0}
+body[data-theme="light"] .num-btn.bull{background:#c0392b;color:#fff;border:none}
+body .mult-btn.selected[data-m="1"]{background:var(--acc);border-color:var(--acc);color:#fff}
+body .mult-btn.selected[data-m="2"]{background:#0b8a4c;border-color:#0b8a4c;color:#fff}
+body .mult-btn.selected[data-m="3"]{background:#f2c230;border-color:#f2c230;color:#1a1300}
+body .num-btn:active,body .qs-btn:active{background:var(--acc);border-color:var(--acc);color:#fff}
+body[data-accent="blanc"] .mult-btn.selected[data-m="1"],body[data-accent="blanc"] .cb-m.closed{color:#0d1122;text-shadow:none}

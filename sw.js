@@ -2,7 +2,7 @@
    Stratégie : assets statiques en cache-first (précalculés), navigation en
    network-first (une connexion propage les mises à jour), /qr jamais caché. */
 'use strict';
-var VERSION = 'pd-offline-v3';
+var VERSION = 'pd-offline-v1.5.2';
 var CORE_CACHE = 'pd-core-' + VERSION;
 
 var PRECACHE = [
@@ -60,14 +60,15 @@ self.addEventListener('fetch', function (e) {
   if (url.origin !== location.origin) return;
   if (url.pathname.startsWith('/qr')) return;
 
-  if (req.mode === 'navigate') {
+  if (req.mode === 'navigate' || /\.(js|css)$/.test(url.pathname)) {
     e.respondWith(
       fetch(req).then(function (res) {
         var copy = res.clone();
-        caches.open(CORE_CACHE).then(function (c) { c.put('index.html', copy); });
+        var key = req.mode === 'navigate' ? 'index.html' : req;
+        caches.open(CORE_CACHE).then(function (c) { c.put(key, copy); });
         return res;
       }).catch(function () {
-        return caches.match('index.html');
+        return caches.match(req.mode === 'navigate' ? 'index.html' : req);
       })
     );
     return;

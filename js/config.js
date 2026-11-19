@@ -34,3 +34,42 @@ function saveSettings(){try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(SET
 function applyTheme(){document.body.dataset.theme=SETTINGS.theme==='light'?'light':'dark';document.body.dataset.accent=SETTINGS.accent;document.body.dataset.oled=SETTINGS.oled?'1':'';const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',SETTINGS.theme==='light'?'#eef1f8':'#07091a')}
 function buzz(ms){if(SETTINGS.vibration&&navigator.vibrate){try{navigator.vibrate(ms)}catch(e){}}}
 function fmtMode(m){return typeof m==='number'?String(m):({cricket:'Cricket',around:'Around the Clock',bobs27:"Bob's 27",catch40:'Catch 40',highscore:'Highscore'}[m]||String(m))}
+
+/* ================== Rythme du bot (ms) ================== */
+/* start : avant la 1re fléchette ; dart : entre deux fléchettes ;
+   end : dernière fléchette -> décompte du score ; next : score affiché -> joueur suivant. */
+const BOT_DELAYS={start:900,dart:1100,end:1500,next:1200};
+/* Ordre des secteurs sur la cible (voisins pour les ratés du bot). */
+const BOARD_ORDER=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+
+/* ================== Routes de checkout selon les fléchettes restantes ==================
+   checkoutRoute(reste, fléchettesRestantes, doubleOut) -> "T17 DBull" ou null.
+   Double out : route de CHECKOUTS si elle tient dans les fléchettes restantes,
+   sinon plus courte route calculée (dernière fléchette = double). */
+const CO_SETUP=(()=>{const a=[];for(let n=20;n>=1;n--)a.push(['T'+n,3*n]);for(let n=20;n>=1;n--)a.push([String(n),n]);a.push(['Bull',25],['DBull',50]);for(let n=20;n>=1;n--)a.push(['D'+n,2*n]);return a})();
+const CO_DOUBLES=[20,16,18,12,10,8,19,17,15,14,13,11,9,7,6,5,4,3,2,1].map(n=>['D'+n,2*n]).concat([['DBull',50]]);
+const coCache={};
+function checkoutRoute(rem,darts,doubleOut){
+  if(doubleOut===undefined)doubleOut=true;
+  darts=Math.max(0,Math.min(3,darts|0));
+  if(!darts||rem<(doubleOut?2:1)||rem>(doubleOut?CHECKOUT_MAX:180))return null;
+  const key=rem+':'+darts+':'+(doubleOut?1:0);
+  if(key in coCache)return coCache[key];
+  let res=null;
+  const tab=doubleOut?CHECKOUTS[rem]:null;
+  if(tab&&tab.split(' ').length<=darts)res=tab;
+  else{
+    const fin=doubleOut?CO_DOUBLES:CO_SETUP;
+    search:for(let n=1;n<=darts;n++){
+      const go=(left,depth,acc)=>{
+        if(depth===n-1){const f=fin.find(s=>s[1]===left);return f?acc.concat(f[0]):null}
+        for(const s of CO_SETUP){if(s[1]>=left)continue;const r=go(left-s[1],depth+1,acc.concat(s[0]));if(r)return r}
+        return null;
+      };
+      const r=go(rem,0,[]);
+      if(r){res=r.join(' ');break search}
+    }
+  }
+  coCache[key]=res;
+  return res;
+}

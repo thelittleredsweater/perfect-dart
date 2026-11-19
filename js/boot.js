@@ -29,6 +29,7 @@ document.getElementById('setInput')?.addEventListener('change',e=>{persistSettin
 document.getElementById('setVib')?.addEventListener('change',e=>{persistSettings()});
 applyModeFieldVisibility();
 updateMuteBtn();
+initBackButton();
 /* Lien d'invitation (QR hote) : /index.html?join=CODE -> pre-remplir le code et rejoindre.
    Redirection APK depuis la page appassets : ?create=1 -> cree une partie hote directement.
    Ces parametres portent l'action a travers le changement d'origine (l'adresse du
