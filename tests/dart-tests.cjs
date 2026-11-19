@@ -528,6 +528,8 @@ async function testsNetOffline() {
   console.log('\n== Reseau hors ligne (webview) ==');
   { // adresse serveur (APK) : netUrl et connect
     const t = loadGame(createEnv());
+    check(/^wss:\/\/.+\/ws\?code=ABCDEF$/.test(t.exec('netUrl("ABCDEF")')), 'netUrl : relais en ligne par defaut', String(t.exec('netUrl("ABCDEF")')));
+    t.exec('setNetMode("local")');
     t.exec('localStorage.setItem(SERVER_KEY,"192.168.1.9:3210")');
     check(t.exec('netUrl()') === 'ws://192.168.1.9:3210/ws', 'netUrl : adresse sauvegardee utilisee', String(t.exec('netUrl()')));
     t.exec('document.getElementById("netServerAddr").value="10.0.0.5:3210"');

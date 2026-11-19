@@ -33,6 +33,13 @@ export default {
       return new Response(svg, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
     }
     if (url.pathname === '/health') return new Response('ok');
+    /* Version publiée : lue par l'appli Android (autre origine) -> CORS, jamais en cache. */
+    if (url.pathname === '/version.json') {
+      const r = await env.ASSETS.fetch(req);
+      const h = new Headers(r.headers);
+      h.set('Access-Control-Allow-Origin', '*'); h.set('Cache-Control', 'no-store');
+      return new Response(r.body, { status: r.status, headers: h });
+    }
     return env.ASSETS.fetch(req);
   },
 };

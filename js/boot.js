@@ -1,5 +1,6 @@
 'use strict';
 document.addEventListener('DOMContentLoaded',()=>{
+setTimeout(()=>{try{if(typeof initUpdates==='function')initUpdates()}catch(e){}},0);
 try{
 loadSettings();applyTheme();initVoice();
 PLAYER_COUNT=Math.min(6,Math.max(1,SETTINGS.playerCount||2));

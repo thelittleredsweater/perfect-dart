@@ -22,6 +22,8 @@ const STATE={
   cricketMarks:{},aroundClock:{},ms:{}
 };
 const STORAGE_KEY='perfectdarts_save_v1';
+/* Version de l'appli : doit être identique à package.json (vérifié par scripts/build-web.cjs). */
+const APP_VERSION='1.7.0';
 const CAREER_KEY='perfectdarts_career_v1';
 /* Relais en ligne (grand écran TV, jeu à distance) : adresse du Worker Cloudflare (relay/). */
 const ONLINE_SERVER='https://perfect-darts.perfect-darts-relay.workers.dev';

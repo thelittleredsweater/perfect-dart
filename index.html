@@ -22,6 +22,7 @@
       <button class="btn btn-ghost btn-sm" onclick="openCast()"><span class="qn-i">📺</span><span>Caster</span></button>
       <button class="btn btn-ghost btn-sm" onclick="openSettings()"><span class="qn-i">⚙️</span><span>Réglages</span></button>
     </div>
+    <div class="update-banner" id="updateBanner" style="display:none"></div>
     <div class="setup-logo"><h1>Perfect Darts</h1><p>Le compteur qui te fait progresser</p></div>
     <div class="card" id="cardPlayers">
       <div class="field"><label class="label">Nombre de joueurs</label>
@@ -183,7 +184,9 @@
     </div>
     <div class="card">
       <div class="field"><label class="label">Maintenance</label>
-        <button class="btn btn-ghost btn-sm" onclick="clearSavedGame()">🗑️ Effacer la partie sauvegardée</button>
+        <div class="upd-row"><span>Version <b id="appVersion"></b></span><button type="button" class="btn btn-ghost btn-sm" onclick="checkForUpdate(true)">🔄 Vérifier les mises à jour</button></div>
+        <div class="bk-info" id="updateStatus"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="clearSavedGame()">🗑️ Effacer la partie sauvegardée</button>
         <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="clearSettings()">↩️ Réinitialiser les réglages</button>
       </div>
     </div>
@@ -276,6 +279,7 @@
 <script src="js/tournament.js"></script>
 <script src="js/tv.js"></script>
 <script src="js/cast.js"></script>
+<script src="js/update.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/boot.js"></script>
 <script>

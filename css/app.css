@@ -1076,3 +1076,17 @@ body.tv-idle .tv-tools{opacity:0;pointer-events:none}
 .tc-s{font-size:min(4.4em,6.5vh);line-height:1}
 .tvm{overflow:hidden}
 .tv-crk{width:100%;grid-template-columns:minmax(0,1fr)}
+/* Bandeau de mise à jour (appli Android) */
+.update-banner{background:linear-gradient(135deg,rgba(0,230,118,.18),rgba(8,11,24,.85));border:1px solid rgba(0,230,118,.5);border-radius:18px;padding:14px 16px;margin:0 0 14px;box-shadow:0 6px 24px rgba(0,0,0,.45);position:relative;z-index:2;animation:fadeUp .4s ease}
+.ub-top{display:flex;gap:12px;align-items:center}
+.ub-ic{font-size:1.8em}
+.ub-top b{display:block;font-size:1.02em}
+.ub-top small{color:var(--dim)}
+.update-banner ul{margin:10px 0 0;padding-left:20px;font-size:.86em;color:#dfe5ff}
+.ub-actions{display:flex;gap:8px;margin-top:12px}
+.ub-actions .btn{flex:1;width:auto;text-decoration:none;display:flex;align-items:center;justify-content:center}
+.ub-hint{font-size:.75em;color:var(--dim);margin-top:8px;text-align:center}
+.upd-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.upd-row .btn{width:auto}
+body[data-theme="light"] .update-banner{background:linear-gradient(135deg,rgba(0,163,82,.14),rgba(255,255,255,.92))}
+body[data-theme="light"] .update-banner ul{color:#11152a}

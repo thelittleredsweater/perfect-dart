@@ -14,6 +14,7 @@ var PRECACHE = [
   'js/tournament.js',
   'js/tv.js',
   'js/cast.js',
+  'js/update.js',
   'js/config.js',
   'js/dartboard.js',
   'js/game.js',
@@ -63,13 +64,15 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
   if (url.origin !== location.origin) return;
-  if (url.pathname.startsWith('/qr')) return;
+  /* Jamais en cache : QR, relais, fichier de version, APK et pages de téléchargement. */
+  if (/^\/(qr|ws|health|version\.json|download\/|android|iphone)/.test(url.pathname)) return;
 
   if (req.mode === 'navigate' || /\.(js|css)$/.test(url.pathname)) {
     e.respondWith(
       fetch(req).then(function (res) {
         var copy = res.clone();
         var key = req.mode === 'navigate' ? 'index.html' : req;
+        if (!res || !res.ok) return res;
         caches.open(CORE_CACHE).then(function (c) { c.put(key, copy); });
         return res;
       }).catch(function () {
